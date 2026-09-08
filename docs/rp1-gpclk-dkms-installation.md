@@ -3,9 +3,11 @@
 WsprryPi can orchestrate installation of the independently maintained
 [`WsprryPi/RP1-GPCLK-DKMS`](https://github.com/WsprryPi/RP1-GPCLK-DKMS)
 provider. WsprryPi does not vendor its module source, reproduce its DKMS
-lifecycle, select a GPIO route during installation, edit boot configuration, or
-enable output. A source or release that implements the reviewed runtime contract
-is activated only to route-neutral controller and manager administration.
+lifecycle, edit boot configuration, or enable transmission. A source or release
+that implements the reviewed runtime contract is first activated to route-neutral
+controller and manager administration. Setup then restores an explicitly saved
+`rp1-gpclk` GPIO4 or GPIO20 selection through the provider's managed route
+transaction, with transmission disabled.
 
 ## Startup integration
 
@@ -325,11 +327,12 @@ refusal. When the selected source differs, pre-update recovery is deferred to
 the predecessor-owned provider migration workflow rather than allowing
 candidate code to interpret predecessor state.
 
-After neutral administration succeeds, the installer finishes website and
-Apache publication and requires `wsprrypi.service` to become active. It reloads
+After neutral administration succeeds, the installer restores any explicit
+saved RP1 route, finishes website and Apache publication and requires
+`wsprrypi.service` to become active. It reloads
 systemd after neutral activation removes any temporary inhibition drop-in, then
 starts the service idempotently so cached unit conditions cannot suppress the
-restored application. With web
+restored application before the route-restoration step. With web
 mode enabled it also
 requires the installed loopback `/wsprrypi/version` proxy endpoint to respond.
 A later owned uninstall accepts that exact installer-started service transition
@@ -346,14 +349,30 @@ older v1 installation record did not distinguish a newly installed provider
 from an idempotently accepted pre-existing provider, so it is deliberately
 insufficient for automatic removal.
 
-Installation stops at route zero. A later explicit operator selection of GPIO4
-or GPIO20 invokes upstream `route-plan`; WsprryPi retains the reviewed digest
+Provider installation and activation stop at route zero. After activation and
+service startup, `runtime_reconcile.py install` reads the installed configuration.
+An explicit `Transmit Backend = rp1-gpclk` with `Transmit Pin = 4` or `20`
+restores that route using the installed provider's `route-plan` and `route-ensure`
+commands. Setup requires disabled transmission, exact ownership and binding,
+unchanged configuration and service policy, and final matching route evidence
+with no owner or lease. A refusal fails setup and retains bounded failure details
+in the installer log. A saved GPIO value for another backend does not select a
+route. This installer action is separate from normal reboot reconciliation.
+
+Completed reboot checkpoints are scoped to boot and installed binding; a
+completed record from a replaced binding cannot suppress reconciliation. The
+installer records a new completed checkpoint only after successful restoration.
+Concurrent startup workers defer to the reconciliation already in progress.
+
+When RP1 is not explicitly configured, setup remains at route zero. A later
+explicit operator selection of GPIO4 or GPIO20 invokes upstream `route-plan`;
+WsprryPi retains the reviewed digest
 and calls `route-ensure` only for the same route and current preflight
 generation. Only this route transaction changes the application backend to
 `rp1-gpclk`, persists the selected pin, and keeps WsprryPi idle. The production
 module uses the root-owned mode-0600 endpoint with `output_inhibit=0`; application
 policy and operator confirmation still gate every transmission. A saved or
-default GPIO value is not installation-time route consent. Because the provider
+default GPIO value alone is not installation-time route consent. Because the provider
 endpoint is route-owned, `/dev/rp1-gpclk` is normally absent at this neutral
 stage. **Setup > Transmitter** keeps GPIO selectable as **GPIO (route required)**
 and exposes the route panel so the operator can make the first explicit choice;

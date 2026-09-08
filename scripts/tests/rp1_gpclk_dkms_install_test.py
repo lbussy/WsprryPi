@@ -3221,7 +3221,7 @@ cleanup_rp1_gpclk_dkms_state
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(sentinel.exists())
-            self.assertEqual(result.stdout.count("Complete: (dry)"), 5)
+            self.assertEqual(result.stdout.count("Complete: (dry)"), 6)
             self.assertIn(
                 "[INFO ] Resolve RP1-GPCLK-DKMS installation plan.",
                 result.stdout,
@@ -3487,8 +3487,9 @@ cleanup_rp1_gpclk_dkms_state
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         arguments = capture.read_text().splitlines()
-        self.assertEqual(arguments.count("CALL"), 4)
+        self.assertEqual(arguments.count("CALL"), 5)
         self.assertEqual(arguments.count("ARG=--debug"), 4)
+        self.assertIn("ARG=/usr/local/lib/wsprrypi/runtime_reconcile.py", arguments)
 
     def test_selected_uninstall_dry_run_reports_check_without_invoking_python(self):
         install_script = ROOT / "scripts" / "install.sh"
@@ -3611,6 +3612,37 @@ remove_owned_rp1_gpclk_dkms_provider debug
         )
         self.assertLess(activation, reload)
         self.assertLess(reload, start)
+        restoration = function.index('exec_command "Restore configured RP1 route with transmission disabled"')
+        self.assertLess(start, restoration)
+        self.assertIn('route-restoration-output.log', function)
+        self.assertIn('setup cannot confirm transmitter readiness', function)
+
+    def test_route_restoration_failure_stops_installer_activation(self):
+        shell = r'''
+source "$INSTALL_SCRIPT"
+ACTION=install DRY_RUN=false INSTALL_RP1_GPCLK_DKMS=true
+RP1_GPCLK_DKMS_STATE_DIR=/fixture RP1_GPCLK_DKMS_HELPER=/fixture/helper.py
+logD() { :; }
+warn() { printf '%s\n' "$1"; }
+exec_command() {
+    printf '%s\n' "$1"
+    if [[ "$1" == "Restore configured RP1 route with transmission disabled" ]]; then
+        [[ "$EXEC_COMMAND_FAILURE_OUTPUT_FILE" == /fixture/route-restoration-output.log ]] || return 99
+        [[ "$2" == python3 && "$3" == /usr/local/lib/wsprrypi/runtime_reconcile.py && "$4" == install ]] || return 98
+        return "$ROUTE_RESULT"
+    fi
+}
+activate_rp1_gpclk_runtime_administration || exit 1
+printf 'SETUP_CONTINUES\n'
+'''
+        for status in (0, 12):
+            result = subprocess.run(['bash', '-c', shell], text=True, capture_output=True,
+                env={**os.environ, 'INSTALL_SCRIPT': str(ROOT/'scripts/install.sh'),
+                     'ROUTE_RESULT': str(status)})
+            self.assertEqual(result.returncode, 0 if status == 0 else 1, result.stderr)
+            self.assertEqual('SETUP_CONTINUES' in result.stdout, status == 0)
+            self.assertEqual('cannot confirm transmitter readiness' in result.stdout, status != 0)
+            self.assertLess(result.stdout.index('Activate neutral'), result.stdout.index('Restore configured'))
 
     def test_runtime_readiness_summary_follows_execution_loop(self):
         source = (ROOT / "scripts/install.sh").read_text()

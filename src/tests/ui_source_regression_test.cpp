@@ -246,7 +246,7 @@ int main()
             ui_source.find("completeGuardedActiveModeChange();") != std::string::npos &&
             ui_source.find("guardedActiveModeChange: true,") != std::string::npos &&
             ui_source.find("suspendConfigAutosave(true);") != std::string::npos &&
-            ui_source.find("input:not(#transmit, #wtp_visible, [name=\"mode_toggle\"], [name=\"qrss_type\"])") != std::string::npos &&
+            ui_source.find("input:not(#transmit, [name=\"mode_toggle\"], [name=\"qrss_type\"])") != std::string::npos &&
             ui_source.find("configAutosaveNeedsRuntimeRefresh = true;") != std::string::npos &&
             ui_source.find("pendingPersistedMode = currentConfigModeSelection;") != std::string::npos &&
             ui_source.find("flushAutosave();") != std::string::npos &&

@@ -4016,8 +4016,15 @@ function populateSi5351Addresses(bus, savedAddress, addresses, error = "", inven
             ? "No compatible Si5351 found"
             : "Select a detected address";
     field.add(new Option(placeholder, "", true, !present));
+    if (normalizedSaved && !present) {
+        const unavailable = new Option(`${normalizedSaved} (not detected)`, normalizedSaved, true, true);
+        unavailable.disabled = true;
+        field.add(unavailable);
+    }
     for (const address of normalizedAddresses) field.add(new Option(address, address));
-    field.value = present ? normalizedSaved : "";
+    // Preserve the saved value for other-backend updates; discovery determines
+    // Si5351 availability, not whether its inactive settings may be retained.
+    field.value = normalizedSaved;
     field.disabled = selectedTransmitBackend() !== "si5351" ||
         normalizedAddresses.length === 0 || !!si5351AddressInventoryState.error;
     field.removeAttribute("aria-busy");
@@ -4041,7 +4048,7 @@ function refreshSi5351Addresses(bus, savedAddressOverride = null) {
         : formatSi5351Address(savedAddressOverride);
     const requestSequence = ++si5351AddressDiscoverySequence;
     si5351AddressInventoryState = { bus, addresses: [], error: "", loading: true };
-    field.replaceChildren(new Option("Checking I2C bus…", "", true, true));
+    field.replaceChildren(new Option("Checking I2C bus…", savedAddress, true, true));
     field.disabled = true;
     field.setAttribute("aria-busy", "true");
     document.getElementById("si5351-address-hint").textContent =
@@ -4423,7 +4430,7 @@ function buildConfigPayload(options = {}) {
     const si5351_i2c_bus = selectedI2cBusValue();
 
     const si5351_i2c_address = formatSi5351Address(
-        $("#si5351_i2c_address").val()
+        document.getElementById("si5351_i2c_address").value
     );
 
     let si5351_reference_frequency = parseInt($("#si5351_reference_frequency").val(), 10);

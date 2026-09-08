@@ -2716,7 +2716,8 @@ prepare_rp1_gpclk_runtime_update() {
 #          The helper builds and reviews the exact runtime bundle, executes the
 #          reviewed deployment and neutral-activation plans, and requires
 #          neutral_ready with administration eligible and transmission
-#          ineligible. It never selects GPIO4/GPIO20 or authorizes output.
+#          ineligible before restoring an explicit saved RP1 route. Neither
+#          stage authorizes transmission.
 # -----------------------------------------------------------------------------
 activate_rp1_gpclk_runtime_administration() {
     local debug
@@ -2749,6 +2750,17 @@ activate_rp1_gpclk_runtime_administration() {
         systemctl daemon-reload "$debug" || return 1
     exec_command "Start WsprryPi after RP1 runtime activation" \
         systemctl start "$WSPR_SERVICE.service" "$debug" || return 1
+    # Neutral administration is only the provider bootstrap. Explicit persisted
+    # RP1 configuration must also regain its route before setup reports success.
+    if [[ "$DRY_RUN" != "true" ]]; then
+        failure_output_file="$RP1_GPCLK_DKMS_STATE_DIR/route-restoration-output.log"
+    fi
+    if ! EXEC_COMMAND_FAILURE_OUTPUT_FILE="$failure_output_file" \
+        exec_command "Restore configured RP1 route with transmission disabled" \
+        python3 /usr/local/lib/wsprrypi/runtime_reconcile.py install "$debug"; then
+        warn "Configured RP1 route restoration failed; setup cannot confirm transmitter readiness. Inspect the retained installer log and provider state."
+        return 1
+    fi
     debug_end "$debug"
     return 0
 }

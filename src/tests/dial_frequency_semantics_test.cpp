@@ -1,6 +1,7 @@
 #include "arg_parser.hpp"
 #include "backend_capabilities.hpp"
 #include "config_handler.hpp"
+#include "config_handler_serialization.hpp"
 #include "i2c_bus_inventory.hpp"
 #include "execution_plan_compiler.hpp"
 #include "frequency_semantics.hpp"
@@ -692,6 +693,46 @@ void test_idle_startup_overrides()
 
 int main(int argc, char *argv[])
 {
+    if (argc == 2 && std::string(argv[1]) == "--calibration-roundtrip-only")
+    {
+        init_config_json();
+        json_to_config();
+        for (const double value : {0.0, -0.0, 12.345678, -3.5})
+        {
+            auto data = make_managed_ini_data("AA0NT", "EM18", "20m", false);
+            // WTP is compiled in the portable profile. Candidate preparation
+            // validates these fixture identities without opening an endpoint.
+            data["Operation"]["Transmit Backend"] = "wtp";
+            data["WTP"] = {{"Endpoint", "/dev/calibration-test"},
+                {"USB Serial", "calibration-test"}, {"USB Vendor ID", "1"},
+                {"USB Product ID", "2"}, {"Device ID", std::string(32, 'a')}};
+            const auto text = nlohmann::json(value).dump();
+            data["Calibration"]["PPM"] = text;
+            data["GPIO"]["Manual PPM"] = text;
+            data["GPIO"]["Frequency Residual PPM"] = text;
+            iniFile.setData(data);
+            PreparedConfigCandidate candidate;
+            prepare_ini_config_candidate("/tmp/calibration_roundtrip.ini", candidate);
+            require(candidate.valid, "calibration INI candidate must parse: " + candidate.error_reason);
+            require(candidate.normalized_config.si5351_ppm == value &&
+                    candidate.normalized_config.gpio_manual_ppm == value &&
+                    candidate.normalized_config.gpio_frequency_residual_ppm == value,
+                    "calibration must preserve exact zero and custom double values");
+            auto serialized = nlohmann::json::object();
+            config_handler_serialization::serialize_runtime_config_to_json(
+                candidate.normalized_config, serialized);
+            require(serialized["Calibration"]["PPM"].get<double>() == value &&
+                    serialized["GPIO"]["Manual PPM"].get<double>() == value &&
+                    serialized["GPIO"]["Frequency Residual PPM"].get<double>() == value,
+                    "calibration serialization must not introduce an exponent artifact");
+        }
+        ArgParserConfig defaults;
+        require(defaults.si5351_ppm == 0.0 && defaults.gpio_manual_ppm == 0.0 &&
+                defaults.gpio_frequency_residual_ppm == 0.0,
+                "calibration defaults must be exact zero");
+        std::cout << "Calibration exact-zero and custom-value round trips passed" << std::endl;
+        return EXIT_SUCCESS;
+    }
     if (argc == 2 && std::string(argv[1]) == "--idle-startup-overrides-only")
     {
         test_idle_startup_overrides();

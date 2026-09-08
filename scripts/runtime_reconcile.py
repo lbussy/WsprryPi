@@ -29,6 +29,10 @@ SCHEMA = 'wsprrypi-rp1-reboot-reconcile-v1'
 require = installer.require
 
 
+class ReconciliationBusy(Exception):
+    """Another application-owned reconciliation already holds the lock."""
+
+
 def strict_json(data):
     def pairs(items):
         result = {}
@@ -145,14 +149,22 @@ class Linux:
             if os.path.exists(name): os.unlink(name)
 
     @contextlib.contextmanager
-    def lock(self):
+    def lock(self, wait=False):
         fd = os.open(LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         try:
             info = os.fstat(fd)
             require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and
                     stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1,
                     'unsafe reconciliation lock')
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            deadline = time.monotonic() + (30 if wait else 0)
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise ReconciliationBusy() from None
+                    time.sleep(0.1)
             yield
         finally:
             os.close(fd)
@@ -166,6 +178,84 @@ def bound_inspection(system, record):
             identity.get('value', {}).get('artifactSetSha256') == record['runtime']['artifactSetSha256'],
             'provider inspection differs from owned installation')
     return value
+
+
+def restore_installation(system):
+    """Restore explicit persisted RP1 intent after verified neutral installation.
+
+    This is an installer action, never a general startup default. The public
+    provider owns the overlay, module and idle application transaction.
+    """
+    with system.lock(wait=True):
+        config = system.configuration()
+        if config['backend'] != 'rp1-gpclk':
+            return 'configured backend does not require an RP1 route'
+        route = config['route']
+        require(route in ('gpio4', 'gpio20'), 'invalid configured RP1 route')
+        require(config['transmit'] is False,
+                'installation route restoration requires disabled transmission')
+        record = system.ownership()
+        require(record is not None, 'installation route restoration requires owned runtime')
+        boot = system.boot()
+        checkpoint = system.checkpoint()
+        require(not checkpoint or checkpoint['phase'] == 'complete',
+                'unfinished reboot reconciliation requires recovery before installation')
+        service = system.service()
+        require(service.get('LoadState') == 'loaded' and
+                service.get('ActiveState') == 'active' and
+                service.get('UnitFileState') not in ('masked', 'masked-runtime'),
+                'installation route restoration preserves stopped or masked application')
+        initial = bound_inspection(system, record)
+        require(initial.get('result') in ('neutral_ready', 'exact_ready'),
+                'provider refuses installation route restoration: '+str(initial.get('result')))
+        require(initial.get('routes', {}).get('active') in (None, route),
+                'active RP1 route differs from configured installation route')
+        require(initial.get('safety', {}).get('owner') is False and
+                initial.get('safety', {}).get('lease') is False,
+                'installation route restoration requires an unowned provider')
+        args = ['--route', route, '--requested-route', route,
+                '--configured-route', route, '--persisted-route', route]
+        planned = system.call('route-plan', args)
+        plan = planned.get('routePlan', {})
+        digest = plan.get('planSha256')
+        body = {key: value for key, value in plan.items() if key != 'planSha256'}
+        require(digest == installer.sha256_bytes(installer.canonical(body)) and
+                plan.get('version') == 1 and plan.get('operation') == 'select' and
+                plan.get('bindingSha256') == record['runtime']['bindingSha256'] and
+                all(plan.get(name) == route for name in
+                    ('route', 'requestedRoute', 'configuredRoute', 'persistedRoute')),
+                'installation route plan differs from configured route or owned binding')
+        require(system.configuration() == config and system.ownership() == record and
+                system.boot() == boot and system.service() == service,
+                'installation configuration, ownership, boot or service changed during planning')
+        response = system.call('route-ensure', [*args, '--plan-sha256', digest])
+        require(response.get('operation') == 'route-ensure' and
+                response.get('planSha256') == digest and
+                response.get('response', {}).get('status') in ('restored', 'idempotent-ready'),
+                'installation route transaction did not restore the idle application')
+        final = system.call('inspect', args[2:])
+        identity = final.get('identities', {}).get('installedBinding', {})
+        require(final.get('result') == 'exact_ready' and
+                all(final.get('routes', {}).get(name) == route for name in
+                    ('requested', 'configured', 'persisted', 'active')) and
+                identity.get('status') == 'valid' and
+                identity.get('sha256') == record['runtime']['bindingSha256'] and
+                identity.get('value', {}).get('artifactSetSha256') == record['runtime']['artifactSetSha256'] and
+                final.get('safety', {}).get('owner') is False and
+                final.get('safety', {}).get('lease') is False and
+                final.get('safety', {}).get('operationalReady') is True and
+                all(final.get('safety', {}).get(name) == 'quiescent' for name in
+                    ('clock', 'gpio', 'dma')) and
+                final.get('manager', {}).get('query', {}).get('state', {}).get('outputEnabled') is False,
+                'installed RP1 route did not reach exact unowned readiness')
+        require(system.configuration() == config and system.ownership() == record and
+                system.boot() == boot and system.service() == service,
+                'installation state changed during route restoration')
+        system.save({'schema': SCHEMA, 'bootId': boot,
+            'bindingSha256': record['runtime']['bindingSha256'], 'route': route,
+            'activationPlanSha256': record['runtime']['activationPlanSha256'],
+            'phase': 'complete'})
+        return 'Configured RP1 '+route.upper()+' route verified; transmission remains disabled.'
 
 
 def journal_of(value):
@@ -223,8 +313,13 @@ def reconcile(system):
             return 'not-applicable'
         boot = system.boot()
         checkpoint = system.checkpoint()
-        if checkpoint and checkpoint['bootId'] == boot and checkpoint['phase'] == 'complete':
-            return 'already-complete'
+        if checkpoint and checkpoint['phase'] == 'complete':
+            if (checkpoint['bootId'] == boot and
+                    checkpoint['bindingSha256'] == record['runtime']['bindingSha256']):
+                return 'already-complete'
+            # A terminal record from a replaced installation proves no current
+            # reconciliation. Preserve it on disk until new work succeeds.
+            checkpoint = None
         if checkpoint and checkpoint['phase'] == 'pending':
             require(checkpoint['bootId'] == boot and
                     checkpoint['bindingSha256'] == record['runtime']['bindingSha256'],
@@ -303,10 +398,13 @@ def reconcile(system):
 
 def main():
     require(os.geteuid() == 0, 'root required')
-    require(sys.argv[1:] in (['prepare'], ['reconcile']), 'expected prepare or reconcile')
+    require(sys.argv[1:] in (['prepare'], ['reconcile'], ['install']),
+            'expected prepare, reconcile or install')
     system = Linux()
     if sys.argv[1] == 'prepare':
         prepare(system)
+    elif sys.argv[1] == 'install':
+        print(restore_installation(system))
     else:
         # Type=simple starts before application config loading; wait only for
         # the existing idle startup override to take effect, never edit policy.
@@ -320,6 +418,13 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except ReconciliationBusy:
+        if sys.argv[1:] == ['reconcile']:
+            # Route restoration restarts the application and launches this
+            # worker while its installer/worker parent still holds the lock.
+            print('RP1 reconciliation already in progress')
+        else:
+            sys.exit('RP1 installation route restoration timed out waiting for reconciliation')
     except (OSError, ValueError, KeyError, TypeError, installer.ContractError,
             subprocess.SubprocessError) as error:
         sys.exit('RP1 startup recovery refused: '+str(error))

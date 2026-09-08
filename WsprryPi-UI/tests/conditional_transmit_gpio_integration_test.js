@@ -192,7 +192,7 @@ async function captureRp1DriveScreenshot(client, outputPath, theme) {
     fs.writeFileSync(outputPath, screenshot.data, "base64");
 }
 
-async function captureSi5351LayoutScreenshot(client, outputPath, theme) {
+async function captureSi5351LayoutScreenshot(client, outputPath, theme, missing = false) {
     await client.send("Runtime.evaluate", {
         expression: `(() => {
             document.documentElement.setAttribute("data-bs-theme", ${JSON.stringify(theme)});
@@ -212,7 +212,7 @@ async function captureSi5351LayoutScreenshot(client, outputPath, theme) {
             document.querySelectorAll(".modal-backdrop").forEach(backdrop => backdrop.remove());
             document.body.classList.remove("modal-open");
             populateI2cBuses(1);
-            populateSi5351Addresses(1, "0x60", ["0x60"], "", 1);
+            populateSi5351Addresses(1, "0x60", ${missing ? '[]' : '["0x60"]'}, "", 1);
             document.getElementById("si5351_reference_frequency").value = "27000000";
             clickTransmitBackend();
             updateBackendPlatformSupportUi();
@@ -909,6 +909,16 @@ async function browserTest() {
         "an explicit Si5351 selection must reveal its configuration panel");
 
     // Metadata fixtures: no adapter probes.
+    for (const value of ["0", "", "12.345678", "-3.5"]) {
+        for (const id of ["ppm", "gpio_manual_ppm", "gpio_frequency_residual_ppm"]) {
+            field(id).value = value;
+        }
+        const payload = buildConfigPayload();
+        equal(payload.Calibration.PPM, Number(value), "reference calibration exact zero/custom round trip");
+        equal(payload.GPIO["Manual PPM"], Number(value), "fallback calibration exact zero/custom round trip");
+        equal(payload.GPIO["Frequency Residual PPM"], Number(value), "residual calibration exact zero/custom round trip");
+    }
+    for (const id of ["ppm", "gpio_manual_ppm", "gpio_frequency_residual_ppm"]) field(id).value = "0";
     window.WSPRRYPI_PLATFORM.i2cBuses = [
         { Number: 10, Name: "Secondary adapter" }, { Number: 1, Name: "Header adapter" }, null, { Number: -1 }, { Number: 2147483648 }
     ];
@@ -926,18 +936,28 @@ async function browserTest() {
     equal(field("si5351_i2c_address").options.length, 3,
         "address selector contains one placeholder and only unique detected in-range addresses");
     populateSi5351Addresses(1, "0x61", ["0x60"], "", 1);
-    equal(field("si5351_i2c_address").value, "", "unavailable saved address has no selection");
-    equal(buildConfigPayload().Si5351["I2C Address"], "", "no silent address fallback");
+    equal(field("si5351_i2c_address").value, "0x61", "unavailable saved address remains visible");
+    ok(field("si5351_i2c_address").selectedOptions[0].disabled, "unavailable address cannot be selected");
+    equal(buildConfigPayload().Si5351["I2C Address"], "0x61", "no silent address fallback");
+    ok(!validateSi5351I2cAddress(), "preserved missing address is not detected hardware");
     ok(field("si5351-address-hint").textContent.includes("saved address 0x61"),
         "unavailable saved address is explained");
     populateSi5351Addresses(1, "0x60", [], "", 1);
+    field("transmit_backend").checked = false;
+    clickTransmitBackend();
+    equal(buildConfigPayload().Si5351["I2C Address"], "0x60",
+        "RP1 updates preserve the saved Si5351 address when the device is absent");
     ok(field("si5351_i2c_address").disabled, "empty address inventory disables selector");
     ok(field("si5351-address-hint").textContent.includes("No register-compatible"),
         "empty address inventory is explained");
     populateSi5351Addresses(1, "0x60", [], "Permission denied", 1);
+    equal(buildConfigPayload().Si5351["I2C Address"], "0x60",
+        "discovery errors do not erase inactive backend settings");
     ok(field("si5351-address-hint").textContent.includes("Permission denied"),
         "address discovery failure remains distinct from empty inventory");
     populateSi5351Addresses(1, "0x60", ["0x60"], "", 1);
+    field("transmit_backend").checked = true;
+    clickTransmitBackend();
     field("si5351_i2c_bus").value = "";
     ok(Number.isNaN(selectedI2cBusValue()), "empty selection is not bus zero or a saved fallback");
     populateI2cBuses(7);
@@ -1071,6 +1091,7 @@ async function main() {
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Desktop_Dark.png"), "dark");
             await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Desktop_Light.png"), "light");
             await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Desktop_Dark.png"), "dark");
+            await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Missing_Desktop.png"), "light", true);
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Light.png"), "light");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Dark.png"), "dark");
             await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Desktop_Light.png"), "light");
@@ -1093,6 +1114,7 @@ async function main() {
             await captureRp1DriveScreenshot(client, path.join(screenshotDir, "RP1_Drive_Mobile_Dark.png"), "dark");
             await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Mobile_Light.png"), "light");
             await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Mobile_Dark.png"), "dark");
+            await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Missing_Mobile.png"), "dark", true);
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Light.png"), "light");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Dark.png"), "dark");
             await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Mobile_Light.png"), "light");

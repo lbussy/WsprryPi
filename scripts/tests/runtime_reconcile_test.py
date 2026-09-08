@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -20,7 +21,8 @@ def digest(value):
 
 class System:
     def __init__(self, route='gpio4', history=True):
-        self.record = {'runtime': {'bindingSha256': 'a'*64, 'artifactSetSha256': 'b'*64}}
+        self.record = {'runtime': {'bindingSha256': 'a'*64, 'artifactSetSha256': 'b'*64,
+                                  'activationPlanSha256': 'd'*64}}
         self.config = {'backend': 'rp1-gpclk', 'route': route, 'transmit': False}
         self.saved = None
         self.env = None
@@ -38,7 +40,7 @@ class System:
         self.interrupt = None
 
     def bootstrap_capable(self): pass
-    def lock(self): return contextlib.nullcontext()
+    def lock(self, wait=False): return contextlib.nullcontext()
     def ownership(self): return copy.deepcopy(self.record)
     def configuration(self): return copy.deepcopy(self.config)
     def checkpoint(self): return copy.deepcopy(self.saved)
@@ -56,7 +58,11 @@ class System:
             return {'result': self.state, 'identities': {'installedBinding': {
                 'status': 'valid', 'sha256': 'a'*64, 'value': {'artifactSetSha256': 'b'*64}}},
                 'activation': {'value': {'activationJournal': copy.deepcopy(self.journal)}},
-                'routes': {'active': self.active}, 'safety': {'owner': False, 'lease': False}}
+                'routes': {'active': self.active, **{key: self.config['route'] for key in
+                    ('requested', 'configured', 'persisted')}},
+                'manager': {'query': {'state': {'outputEnabled': False}}},
+                'safety': {'owner': False, 'lease': False, 'operationalReady': True,
+                           'clock': 'quiescent', 'gpio': 'quiescent', 'dma': 'quiescent'}}
         if operation == 'activation-plan':
             return {'activationPlan': dict(self.plan, planSha256=self.plan_hash)}
         if operation == 'activation-ensure':
@@ -66,7 +72,10 @@ class System:
             if self.interrupt == operation: raise KeyboardInterrupt()
             return {'operation': operation, 'response': {'status': 'activated-neutral'}}
         if operation == 'route-plan':
-            body = {'route': self.config['route'], 'bindingSha256': 'a'*64}
+            body = {'version': 1, 'operation': 'select',
+                'route': self.config['route'], 'bindingSha256': 'a'*64,
+                **{key: self.config['route'] for key in
+                   ('requestedRoute', 'configuredRoute', 'persistedRoute')}}
             return {'routePlan': dict(body, planSha256=digest(body))}
         if operation == 'route-ensure':
             assert arguments[:8] == ['--route', self.config['route'], '--requested-route', self.config['route'],
@@ -74,11 +83,145 @@ class System:
             self.state = 'exact_ready'
             self.active = self.config['route']
             if self.interrupt == operation: raise KeyboardInterrupt()
-            return {'response': {'status': 'restored'}}
+            return {'operation': operation, 'planSha256': arguments[-1],
+                    'response': {'status': 'restored'}}
         raise AssertionError(operation)
 
 
 class Tests(unittest.TestCase):
+    def test_lock_contention_defers_workers_and_bounds_installer_wait(self):
+        system = recovery.Linux()
+        info = SimpleNamespace(st_mode=0o100600, st_uid=0, st_nlink=1)
+        with patch.object(recovery.os, 'open', return_value=41), \
+             patch.object(recovery.os, 'fstat', return_value=info), \
+             patch.object(recovery.os, 'close') as close, \
+             patch.object(recovery.fcntl, 'flock', side_effect=BlockingIOError), \
+             patch.object(recovery.time, 'monotonic', side_effect=[0, 1, 0, 31]), \
+             patch.object(recovery.time, 'sleep') as sleep:
+            for wait in (False, True):
+                with self.assertRaises(recovery.ReconciliationBusy):
+                    with system.lock(wait=wait): self.fail('contended lock admitted')
+            self.assertEqual(close.call_count, 2)
+            sleep.assert_not_called()
+        with patch.object(recovery.os, 'open', return_value=41), \
+             patch.object(recovery.os, 'fstat', return_value=info), \
+             patch.object(recovery.os, 'close') as close, \
+             patch.object(recovery.fcntl, 'flock', side_effect=[BlockingIOError(), None]), \
+             patch.object(recovery.time, 'monotonic', side_effect=[0, 1]), \
+             patch.object(recovery.time, 'sleep') as sleep:
+            with system.lock(wait=True): pass
+            close.assert_called_once_with(41)
+            sleep.assert_called_once_with(0.1)
+
+    def test_installation_restores_both_configured_routes_and_retries(self):
+        for route in ('gpio4', 'gpio20'):
+            for boundary in (None, 'route-ensure', 'complete'):
+                with self.subTest(route=route, boundary=boundary):
+                    system = System(route)
+                    system.state = 'neutral_ready'
+                    system.interrupt = boundary
+                    if boundary:
+                        with self.assertRaises(KeyboardInterrupt):
+                            recovery.restore_installation(system)
+                    system.interrupt = None
+                    self.assertIn('verified', recovery.restore_installation(system))
+                    self.assertEqual(system.active, route)
+                    self.assertFalse(system.config['transmit'])
+                    self.assertEqual(system.saved['bindingSha256'], 'a'*64)
+                    self.assertFalse(any(name.startswith('activation-') for name, _ in system.calls))
+                    # A completed install checkpoint is never a bypass: retry
+                    # must inspect provider state again, then use a fresh plan.
+                    count = len(system.calls)
+                    recovery.restore_installation(system)
+                    self.assertGreater(len(system.calls), count)
+
+    def test_installation_ignores_other_backends_without_provider_calls(self):
+        for backend in ('gpio', 'si5351'):
+            system = System()
+            system.config['backend'] = backend
+            system.record = None
+            recovery.restore_installation(system)
+            self.assertFalse(system.calls)
+            self.assertIsNone(system.saved)
+
+    def test_installation_rejects_unsafe_or_unproven_initial_state(self):
+        changes = (
+            lambda s: s.config.update(transmit=True),
+            lambda s: s.config.update(route='gpio17'),
+            lambda s: setattr(s, 'record', None),
+            lambda s: setattr(s, 'state', 'conflict'),
+            lambda s: setattr(s, 'state', 'recovery_required'),
+            lambda s: setattr(s, 'state', 'activation_required'),
+            lambda s: setattr(s, 'active', 'gpio20'),
+            lambda s: setattr(s, 'saved', {'phase': 'pending'}),
+            lambda s: s.service_state.update(ActiveState='inactive'),
+            lambda s: s.service_state.update(UnitFileState='masked'),
+            lambda s: s.record['runtime'].update(bindingSha256='c'*64),
+        )
+        for mutate in changes:
+            system = System(); system.state = 'neutral_ready'; mutate(system)
+            with self.subTest(mutate=mutate), self.assertRaises(recovery.installer.ContractError):
+                recovery.restore_installation(system)
+            self.assertFalse(any(name == 'route-ensure' for name, _ in system.calls))
+
+    def test_installation_rejects_tampered_plans_and_concurrent_changes(self):
+        changes = (
+            lambda s, r: r['routePlan'].update(planSha256='0'*64),
+            lambda s, r: r['routePlan'].update(bindingSha256='c'*64),
+            lambda s, r: r['routePlan'].update(route='gpio20'),
+            lambda s, r: s.config.update(route='gpio20'),
+            lambda s, r: s.config.update(transmit=True),
+            lambda s, r: s.record['runtime'].update(bindingSha256='c'*64),
+            lambda s, r: s.service_state.update(ActiveState='inactive'),
+            lambda s, r: setattr(s, 'current_boot', 'changed'),
+        )
+        for mutate in changes:
+            system = System(); system.state = 'neutral_ready'
+            call = system.call
+            def changed(operation, arguments=()):
+                result = call(operation, arguments)
+                if operation == 'route-plan': mutate(system, result)
+                return result
+            with patch.object(system, 'call', changed), self.assertRaises(recovery.installer.ContractError):
+                recovery.restore_installation(system)
+            self.assertFalse(any(name == 'route-ensure' for name, _ in system.calls))
+
+    def test_installation_requires_exact_final_evidence_and_idle_application(self):
+        changes = (
+            lambda s, r: r.update(result='neutral_ready'),
+            lambda s, r: r['routes'].update(active='gpio20'),
+            lambda s, r: r['routes'].pop('persisted'),
+            lambda s, r: r['safety'].update(owner=True),
+            lambda s, r: r['safety'].update(lease=True),
+            lambda s, r: r['safety'].update(clock='unknown'),
+            lambda s, r: r['safety'].update(operationalReady=False),
+            lambda s, r: r['manager']['query']['state'].update(outputEnabled=True),
+            lambda s, r: r['identities']['installedBinding'].update(sha256='c'*64),
+            lambda s, r: s.config.update(transmit=True),
+            lambda s, r: s.service_state.update(ActiveState='inactive'),
+        )
+        for mutate in changes:
+            system = System(); system.state = 'neutral_ready'
+            call = system.call
+            def changed(operation, arguments=()):
+                result = call(operation, arguments)
+                if operation == 'inspect' and system.active: mutate(system, result)
+                return result
+            with patch.object(system, 'call', changed), self.assertRaises(recovery.installer.ContractError):
+                recovery.restore_installation(system)
+            self.assertIsNone(system.saved)
+
+    def test_replaced_binding_does_not_reuse_terminal_reboot_checkpoint(self):
+        system = System(); recovery.reconcile(system)
+        system.saved['bindingSha256'] = 'e'*64
+        system.state = 'neutral_ready'
+        system.active = None
+        self.assertEqual(recovery.reconcile(system), 'no-reboot-reconciliation')
+        self.assertEqual(system.saved['bindingSha256'], 'e'*64, 'retain old evidence until success')
+        recovery.restore_installation(system)
+        self.assertEqual(system.active, 'gpio4')
+        self.assertEqual(system.saved['bindingSha256'], 'a'*64)
+
     def test_normal_reboot_recovers_only_each_explicit_selected_route(self):
         for route in ('gpio4', 'gpio20'):
             with self.subTest(route=route):
