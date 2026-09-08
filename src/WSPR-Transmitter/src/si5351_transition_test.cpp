@@ -826,7 +826,12 @@ void test_optimized_backend_and_drive()
         expect(backend.execute(plan).ok && active_drive_ok, "tone programming preserves chosen drive");
         expect(adapter->registers[3] == 255 && adapter->address_attempts[177] == 2,
             "optimized backend retains cleanup and first-only reset");
-        if (optimized) expect(adapter->transactions.size() < 30, "parameter batches reduce transaction count");
+        if (optimized) expect(adapter->transactions.size() < 55, "parameter batches reduce transaction count");
+        bool enabled = false;
+        for (const auto& transaction : adapter->transactions) {
+            if (transaction[0] == 3) enabled = transaction[1] != 255;
+            if (enabled) expect(transaction.size() == 2, "active RF writes must remain individual");
+        }
         adapter->after_write = {};
     }
     for (bool cancel : {false, true})

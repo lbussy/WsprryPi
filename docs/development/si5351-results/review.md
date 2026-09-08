@@ -73,3 +73,15 @@ block boundaries, short writes, no retry, command writes, cache invalidation,
 mid-burst stop/failure and cleanup. Legacy paths and optimized paths are tested.
 Programming-duration debug logging covers the complete tone application,
 including readiness, not just wire time.
+
+
+Live adversarial finding: `step3-40m` completed carrier capture but rejected a
+later active PLL update at the readiness gate. Bus failures would have retained
+a device error; the generic error implicates the non-ready status path, but the
+exact register value was not logged in this attempt. Both RF sources were
+verified off and the installed service/identities restored. The attempt remains
+rejected, not averaged into successful runs. Bursts are now restricted to RF-off
+or explicitly inhibited programming, with individual transactions retained while
+RF is active. Added active-transaction assertions and explicit status logging.
+This closes the unsafe combination conservatively; it does not establish atomic
+or uninterrupted active burst tuning.

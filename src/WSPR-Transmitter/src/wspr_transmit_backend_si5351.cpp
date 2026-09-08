@@ -1136,7 +1136,10 @@ bool WsprSi5351Backend::applyTone(
         for (std::size_t begin = 0; begin < writes.size();)
         {
             if (stop_requested_ || owner_.backendShouldStop()) return false;
-            const std::size_t end = config_.device.optimize_register_writes
+            // Active bursts can expose a transient unlock before the status read.
+            // Keep active-output programming on the measured individual-write path.
+            const std::size_t end = config_.device.optimize_register_writes &&
+                (inhibited || !rf_enabled)
                 ? Si5351Device::writeGroupEnd(writes, begin) : begin + 1;
             if (!(end == begin + 1
                 ? device_.writeRegister(writes[begin].address, writes[begin].value)
@@ -1149,6 +1152,10 @@ bool WsprSi5351Backend::applyTone(
         if (pll_only || (rf_enabled && !inhibited)) {
             std::uint8_t status = 0;
             if (!device_.readRegister(0,status) || (status & 0xa8) != 0) {
+                std::ostringstream message;
+                message << "Si5351 active readiness failure, register 0="
+                        << static_cast<unsigned>(status) << "; inhibiting output.";
+                log_si5351(owner_, WsprTransmitLogLevel::ERROR, message.str());
                 disableTransmitOutput();
                 return false;
             }
