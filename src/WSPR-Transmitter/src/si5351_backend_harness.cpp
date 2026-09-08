@@ -39,6 +39,8 @@
 #include <vector>
 
 #include <cstdlib>
+#include <cmath>
+#include <iomanip>
 
 namespace
 {
@@ -54,6 +56,9 @@ namespace
         int i2c_bus = 1;
         std::uint8_t i2c_address = 0x60;
         bool dry_run = false;
+        double ppm = 0.0;
+        std::string scenario;
+        std::string fade = "none";
     };
 
     static const char *log_level_name(WsprTransmitLogLevel level) noexcept
@@ -89,7 +94,10 @@ namespace
             << "  --power-level <1..4>\n"
             << "  --i2c-bus <n>\n"
             << "  --i2c-address <addr>\n"
-            << "  --dry-run\n";
+            << "  --dry-run\n"
+            << "  --ppm <ppm>\n"
+            << "  --scenario carrier|transitions|keyed (bounded comparison)\n"
+            << "  --fade none|linear|raised_cosine (keyed scenario only)\n";
     }
 
     static double parse_double_arg(
@@ -196,6 +204,9 @@ namespace
                     throw std::invalid_argument("I2C address out of range.");
                 options.i2c_address = static_cast<std::uint8_t>(address);
             }
+            else if (arg == "--ppm") options.ppm = parse_double_arg(arg, require_value());
+            else if (arg == "--scenario") options.scenario = require_value();
+            else if (arg == "--fade") options.fade = require_value();
             else if (arg == "--dry-run")
             {
                 options.dry_run = true;
@@ -211,6 +222,15 @@ namespace
         if (options.power_level < 1 || options.power_level > 4)
             throw std::invalid_argument("Power level must be 1..4.");
 
+        if (!std::isfinite(options.ppm) || std::abs(options.ppm)>200)
+            throw std::invalid_argument("PPM must be finite and within +/-200.");
+        if (!options.scenario.empty() && options.scenario != "carrier" &&
+            options.scenario != "transitions" && options.scenario != "keyed")
+            throw std::invalid_argument("Unknown comparison scenario.");
+        if (options.fade != "none" && options.fade != "linear" && options.fade != "raised_cosine")
+            throw std::invalid_argument("Unknown fade.");
+        if (options.fade != "none" && options.scenario != "keyed")
+            throw std::invalid_argument("Fade requires keyed scenario.");
         return options;
     }
 
@@ -336,6 +356,54 @@ namespace
         plan.mode = parse_mode(options.mode);
         plan.backend = wsprrypi::BackendKind::SI5351;
         plan.reference_frequency_hz = 27000000.0;
+        plan.calibration.ppm = options.ppm;
+        plan.duration_was_explicit = true;
+        if (!options.scenario.empty())
+        {
+            if (!std::isfinite(options.freq_a_hz) ||
+                (options.freq_a_hz != 7040100.0 && options.freq_a_hz != 144490500.0))
+                throw std::invalid_argument("Comparison scenario requires the reviewed 40m or 2m carrier.");
+            const bool transitions = options.scenario == "transitions";
+            const bool keyed = options.scenario == "keyed";
+            plan.mode = transitions ? wsprrypi::TransmissionMode::WSPR : wsprrypi::TransmissionMode::TONE;
+            auto add = [&](int start_ms, int duration_ms, bool on, double frequency) {
+                wsprrypi::RfEvent event;
+                event.offset_from_start = std::chrono::milliseconds(start_ms);
+                event.duration = std::chrono::milliseconds(duration_ms);
+                event.type = on ? wsprrypi::RfEventType::SET_FREQUENCY : wsprrypi::RfEventType::RF_OFF;
+                event.frequency_hz = on ? frequency : 0;
+                event.rf_on = on;
+                if (on && keyed && options.fade != "none") {
+                    event.envelope.fade_shape = options.fade == "linear" ? wsprrypi::FadeShape::LINEAR : wsprrypi::FadeShape::RAISED_COSINE;
+                    event.envelope.fade_in = std::chrono::milliseconds(20);
+                    event.envelope.fade_out = std::chrono::milliseconds(20);
+                    event.envelope.fade_slice = std::chrono::milliseconds(2);
+                }
+                plan.events.push_back(event);
+            };
+            add(0,2000,false,0);
+            if (transitions) {
+                for (int i=0;i<16;++i)
+                    add(2000+i*500,500,true,options.freq_a_hz+(i%4)*1.46484375);
+                add(10000,2000,false,0);
+            } else if (keyed) {
+                for(int i=0;i<8;++i) {
+                    add(2000+i*1000,500,true,options.freq_a_hz);
+                    add(2500+i*1000,500,false,0);
+                }
+                add(10000,2000,false,0);
+            } else {
+                for(int i=0;i<3;++i) {
+                    add(2000+i*4000,2000,true,options.freq_a_hz);
+                    add(4000+i*4000,2000,false,0);
+                }
+            }
+            plan.summary.total_duration = std::chrono::milliseconds(transitions||keyed?12000:14000);
+            plan.summary.event_count = plan.events.size();
+            plan.summary.min_frequency_hz = options.freq_a_hz;
+            plan.summary.max_frequency_hz = options.freq_a_hz+(transitions?4.39453125:0);
+            return plan;
+        }
 
         const std::vector<double> frequencies = mode_frequencies(options);
         const auto total_duration =
@@ -397,7 +465,8 @@ namespace
     static void print_summary(const HarnessOptions& options)
     {
         const std::vector<double> frequencies = mode_frequencies(options);
-        std::cout << "Si5351 backend harness\n";
+        std::cout << std::setprecision(17) << "Si5351 backend harness\n";
+        std::cout << "  Scenario: " << options.scenario << " fade=" << options.fade << " ppm=" << options.ppm << "\n";
         std::cout << "  Mode:        " << options.mode << "\n";
         std::cout << "  Frequencies:";
         for (const double frequency_hz : frequencies)
