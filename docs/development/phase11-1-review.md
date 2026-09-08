@@ -153,3 +153,17 @@ certificates and joint DHCP/name acceptance, 11.4 inhibited physical acceptance,
 review remain. None is satisfied by software-loopback or sanitizer results.
 Commit/push identity and verified remote parity are reported with the completed
 change; no claim that all of Phase 11 is complete is made.
+
+## CI access follow-up
+
+The first pushed implementation, `690a0692cd6cd62c99b89a0f1983d73c01624b47`,
+passed four jobs in [run 34260402019](https://github.com/WsprryPi/WsprryPi/actions/runs/34260402019),
+including Linux semantics, macOS validation and the GCC 13 release build.
+The network job failed before tests because its default repository-scoped token
+could not check out the private WsprryPico repository. This was a CI wiring gap;
+the network and browser steps were skipped, not passed.
+
+The administrator supplied `WSPRRY_PICO_READ_TOKEN` as a WsprryPi Actions secret.
+The pinned Pico checkout now uses it with credential persistence disabled. The
+token value is never part of the workflow or repository. A successful subsequent
+network CI run is required to close this follow-up.
