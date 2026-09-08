@@ -25,13 +25,32 @@ file- or partition-backed swap:
 - below 768 MiB RAM: 2 GiB
 - from 768 MiB up to, but not including, 1.5 GiB RAM: 1 GiB
 
-The default is fail-closed and does not modify swap. An operator who accepts
-the additional disk or flash writes may explicitly allow invocation-owned
-temporary swap:
+`ALLOW_TEMP_BUILD_SWAP` defaults to `auto`. When compilation is required on a
+system below 1.5 GiB RAM and existing independently backed swap is insufficient,
+the installer logs the automatic selection and creates invocation-owned
+temporary swap. At or above 1.5 GiB, or when existing swap meets the target, no
+temporary swap is created. These thresholds are build-resource policy, not a
+guarantee that every build will succeed under other memory pressure.
+
+Temporary swap can slow compilation and increase disk or flash writes. To
+prevent its creation, explicitly opt out:
+
+```sh
+sudo env ALLOW_TEMP_BUILD_SWAP=false ./scripts/install.sh
+```
+
+With `false`, insufficient existing swap stops installation before packages,
+services, or compiled artifacts are changed. `true` remains supported as
+explicit permission to use temporary swap under the same thresholds; it does
+not force allocation on larger systems or when swap is already sufficient:
 
 ```sh
 sudo env ALLOW_TEMP_BUILD_SWAP=true ./scripts/install.sh
 ```
+
+Only `auto`, `true`, and `false` are accepted when build-resource checks run.
+Precompiled application installation skips these checks unless RP1 GPCLK DKMS
+installation is selected, in which case provider compilation still needs them.
 
 The installer allocates only the shortfall plus a small allowance for kernel
 swap metadata, rounded up to 1 MiB, and requires another 512 MiB of free storage
@@ -45,7 +64,9 @@ If disabling the temporary swap fails, the installer returns failure and
 preserves the active file instead of risking its removal. The log gives the
 exact path and recovery command; run that command only after confirming the
 named file is the installer-owned path. `DRY_RUN=true` reports the planned size
-and lifecycle without creating or enabling swap.
+and lifecycle without creating or enabling swap. Insufficient storage or a
+failure to create or enable the temporary swap stops installation; the installer
+does not proceed past a failed resource preflight.
 
 ## RP1-GPCLK-DKMS provider
 

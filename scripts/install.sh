@@ -191,10 +191,11 @@ declare ACTION="${ACTION:-install}"
 # -----------------------------------------------------------------------------
 declare DRY_RUN="${DRY_RUN:-false}"
 
-# Temporary build swap is an explicit installer opt-in. The remaining
+# Temporary build swap defaults to automatic allocation for low-memory builds;
+# false opts out and true explicitly permits the same resource policy. The remaining
 # BUILD_RESOURCE_* variables are test seams and reviewed policy constants; the
 # installer does not expose them as operator controls.
-declare ALLOW_TEMP_BUILD_SWAP="${ALLOW_TEMP_BUILD_SWAP:-false}"
+declare ALLOW_TEMP_BUILD_SWAP="${ALLOW_TEMP_BUILD_SWAP:-auto}"
 declare BUILD_RESOURCE_MEMINFO_PATH="/proc/meminfo"
 declare BUILD_RESOURCE_SWAPS_PATH="/proc/swaps"
 declare BUILD_RESOURCE_SWAP_ROOT="/var/lib/wsprrypi/build-swap"
@@ -6691,9 +6692,9 @@ preflight_build_resources() {
     local required_swap_kb
 
     case "$ALLOW_TEMP_BUILD_SWAP" in
-        true|false) ;;
+        auto|true|false) ;;
         *)
-            logE "ALLOW_TEMP_BUILD_SWAP must be 'true' or 'false'."
+            logE "ALLOW_TEMP_BUILD_SWAP must be 'auto', 'true', or 'false'."
             return 1
             ;;
     esac
@@ -6751,12 +6752,15 @@ preflight_build_resources() {
     if ((zram_swap_free_kb > 0)); then
         logW "Active zram swap is not counted as independently backed build swap."
     fi
-    if [[ "$ALLOW_TEMP_BUILD_SWAP" != "true" ]]; then
+    if [[ "$ALLOW_TEMP_BUILD_SWAP" == "false" ]]; then
         logE "Low-memory build requires at least ${required_swap_kb} KiB of free non-zram swap; ${non_zram_swap_free_kb} KiB is available."
         logE "Enable adequate file/partition swap, or explicitly retry with ALLOW_TEMP_BUILD_SWAP=true."
         return 1
     fi
 
+    if [[ "$ALLOW_TEMP_BUILD_SWAP" == "auto" ]]; then
+        logI "Automatic temporary build swap selected for a low-memory build with insufficient independently backed swap."
+    fi
     create_temp_build_swap "$required_swap_kb" "$non_zram_swap_free_kb"
 }
 
