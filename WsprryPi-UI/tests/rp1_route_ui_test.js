@@ -159,5 +159,21 @@ vm.runInContext(script.slice(script.indexOf("const RP1_ROUTE_STATES"),script.ind
  assert.equal(element("rp1-route-progress-state").textContent,"Route removed");
  assert.equal(element("rp1-route-progress-close").disabled,false,"confirmed neutral state makes the modal dismissible");
  assert.equal(pin,null,"confirmed neutral state retains None in the selector");
+ controller.closeProgress();
+ for(const persisted of ["GPIO4","GPIO20"]){
+  for(const state of ["runtime_neutral_running","runtime_neutral_stopped"]){
+   pin=Number(persisted.slice(4)); // Configuration refresh retains a valid fallback pin.
+   controller.request=async()=>({ok:true,json:async()=>({ok:true,profile:"runtime",
+    state,persisted,requested:persisted,configured:"None",active:"None",compatible:true})});
+   await controller.query();
+   assert.equal(pin,null,"status refresh after dismissal must preserve the confirmed removed route");
+   assert.equal(element("rp1-route-apply").disabled,true,"removed route must not enable a redundant route action");
+   assert.equal(controller.lastPersistableRoute,persisted,"removal retains the saved fallback pin for configuration persistence");
+  }
+  controller.render({ok:true,profile:"runtime",state:"runtime_ready",persisted,
+   requested:persisted,configured:persisted,active:persisted,compatible:true});
+  assert.equal(pin,Number(persisted.slice(4)),"a completed switch selects the confirmed GPIO route");
+  assert.equal(element("rp1-route-apply").disabled,true,"a completed switch has no pending action");
+ }
  console.log("runtime route UI behavior: PASS");
 })().catch(error=>{console.error(error);process.exitCode=1});

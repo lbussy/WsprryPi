@@ -2536,7 +2536,8 @@ class Rp1RouteUiController {
         this.runtimeProfile=data.profile==="runtime";
         const noneOption=document.querySelector('#tx_pin option[value=""]');
         if(noneOption){noneOption.hidden=!this.runtimeProfile;noneOption.disabled=!this.runtimeProfile;}
-        const confirmedNeutral=this.runtimeProfile && data.compatible===true && !data.active;
+        // Completed removal reports "None"; initial neutral status has no active route.
+        const confirmedNeutral=this.runtimeProfile && data.compatible===true && (!data.active || data.active==="None");
         this.persisted=this.routeValue(data.persisted); this.active=confirmedNeutral ? "None" : this.routeValue(data.active);
         if(this.persisted==="GPIO4" || this.persisted==="GPIO20")this.lastPersistableRoute=this.persisted;
         this.developmentCompatible=data.compatible===true;

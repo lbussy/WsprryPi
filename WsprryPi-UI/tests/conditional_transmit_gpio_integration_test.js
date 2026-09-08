@@ -239,7 +239,7 @@ async function captureSi5351LayoutScreenshot(client, outputPath, theme, missing 
     fs.writeFileSync(outputPath, screenshot.data, "base64");
 }
 
-async function captureRouteRequiredRp1Screenshot(client, outputPath, theme) {
+async function captureRouteRequiredRp1Screenshot(client, outputPath, theme, removed = false) {
     await client.send("Runtime.evaluate", {
         expression: `(() => {
             document.documentElement.setAttribute("data-bs-theme", ${JSON.stringify(theme)});
@@ -279,6 +279,10 @@ async function captureRouteRequiredRp1Screenshot(client, outputPath, theme) {
                 developmentPolicy: "Disabled",
                 compatible: true,
                 generation: 0,
+                ...(${JSON.stringify(removed)} ? {
+                    state: "runtime_neutral_running", requested: "GPIO4",
+                    persisted: "GPIO4", configured: "None", active: "None",
+                } : {}),
             });
             const tab = document.getElementById("transmitter-hardware-tab");
             document.querySelectorAll("#configTabs .nav-link").forEach((item) => {
@@ -890,6 +894,24 @@ async function browserTest() {
         "RP1 warning must describe a selected-versus-active mismatch");
     equal(field("transmit_backend").checked, false,
         "RP1 route mismatch must not change the backend switch");
+    for (const persisted of ["GPIO4", "GPIO20"]) {
+        rp1RouteUi.beginProgress("remove", "None");
+        const removed = {
+            profile: "runtime", ok: true, state: "runtime_neutral_running",
+            requested: persisted, persisted, configured: "None", active: "None",
+            compatible: true, generation: 2,
+        };
+        rp1RouteUi.render(removed);
+        bootstrap.Modal.getOrCreateInstance(field("rp1-route-progress-modal")).hide();
+        rp1RouteUi.closeProgress();
+        setTxPin(Number(persisted.slice(4)));
+        rp1RouteUi.render(removed);
+        equal(field("tx_pin").value, "", "refresh after removal must select None");
+        equal(field("rp1-route-apply").disabled, true, "removed route must leave the action disabled");
+        equal(field("rp1-route-state").textContent, "Route removed", "removal status matches the selector");
+        equal(buildConfigPayload().GPIO["Transmit Pin"], Number(persisted.slice(4)),
+            "neutral route must retain the saved GPIO fallback in unrelated configuration saves");
+    }
     rp1RouteUi.render({
         profile: "runtime", ok: true, state: "runtime_ready",
         requested: "GPIO20", persisted: "GPIO20", active: "GPIO20",
@@ -1094,6 +1116,8 @@ async function main() {
             await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Missing_Desktop.png"), "light", true);
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Light.png"), "light");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Desktop_Dark.png"), "dark");
+            await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Removed_Desktop_Light.png"), "light", true);
+            await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Removed_Desktop_Dark.png"), "dark", true);
             await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Desktop_Light.png"), "light");
             await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Desktop_Dark.png"), "dark");
             await captureBandPreferencesScreenshot(client, path.join(screenshotDir, "Band_Preferences_Desktop.png"));
@@ -1117,6 +1141,8 @@ async function main() {
             await captureSi5351LayoutScreenshot(client, path.join(screenshotDir, "Si5351_Missing_Mobile.png"), "dark", true);
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Light.png"), "light");
             await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Required_Mobile_Dark.png"), "dark");
+            await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Removed_Mobile_Light.png"), "light", true);
+            await captureRouteRequiredRp1Screenshot(client, path.join(screenshotDir, "RP1_Route_Removed_Mobile_Dark.png"), "dark", true);
             await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Mobile_Light.png"), "light");
             await captureRouteProgressModalScreenshot(client, path.join(screenshotDir, "RP1_Route_Progress_Mobile_Dark.png"), "dark");
         }
