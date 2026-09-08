@@ -164,39 +164,26 @@ neutral runtime deployment is interrupted after the exact provider has a valid
 WsprryPi v2 ownership record, a repeated installation may enter the same bound
 deployment and recovery workflow; it does not treat that partial state as a
 foreign installation or publish v3 readiness before final neutral proof.
-If a later exact development source is selected, the installer first reviews
-the ownership record and retained rollback paths, permissions, and hashes, but
-does not require ordinary DKMS inventory while the bound runtime deployment is
-still present. The installed, ownership-bound runtime provider first interprets
-its own binding and every bound artifact against WsprryPi ownership. Ordinarily
-it also performs recovery and removal. When a clean reboot has left a coherent
-terminal prior-boot journal set that the older installed provider cannot retire,
-the newly selected immutable provider may perform only its reviewed,
-digest-bound retirement and deployment inverse against that already validated
-binding. A retained
-neutral-activation journal, including `activation-failed`, is copied
-byte-for-byte into the WsprryPi-owned upstream evidence directory before it is
-handled through a digest-reviewed recovery transaction. A terminal
-`complete-neutral` journal from a prior boot may instead be archived and
-retired through the reviewed `activation-retire-plan`/`activation-retire` pair
-when the route, modules, endpoints and manager socket are absent. The retirement
-plan binds any coherent terminal route, manager and application journals from
-that prior boot plus its exact application-owned idle override. It removes the
-override while ownership is still proven, then removes journals in retry-safe
-dependency order before removing the activation journal. Only then does the selected provider review and execute
-the predecessor binding's fixed deployment inverse.
-With runtime residue gone, the installer performs the complete
-ordinary provider/DKMS inventory check, revalidates the rollback authority,
-runs the recorded provider rollback, and installs the new exact source. The
-new candidate executable has no route, activation, adoption, or general
-predecessor-migration authority beyond that exact inactive retirement/removal
-case.
-The same migration applies to v2 partial-runtime and v3 ownership. A loaded
-consumer is admitted only when exact WsprryPi ownership and runtime residue
-lead to the installed provider's digest-reviewed recovery and removal path for
-an exact-provider migration. It never migrates an unowned provider, a
-boot-configured route, a pending unrelated transaction, or drifted binding or
-artifact bytes.
+The selected immutable source must advertise `rp1-gpclk-runtime-update-v1`
+during read-only source resolution, before package, application, or provider
+mutation. An unsupported source fails with an instruction to select a compatible
+provider. Release installations therefore require a provider release containing
+this interface; development installations still resolve their explicit selection
+to an exact commit.
+
+The installed provider is preferred for update preparation. If it lacks the
+interface or its executable has already been removed, the selected exact source
+may provide the compatibility adapter. The provider owns binding-v3 predecessor
+compatibility, controller and journal interpretation, recovery, retirement, and
+its deployment inverse. WsprryPi supplies its recorded source, binding, artifact
+and deployment identities, and verifies the public response and plan digest.
+It does not interpret the opaque plan contents or archive provider journals.
+Provider recovery and archive handling remain within the provider lifecycle.
+
+After verified runtime absence, WsprryPi performs the ordinary provider/DKMS
+inventory check, revalidates retained rollback paths and hashes, invokes the
+recorded provider rollback when needed, and installs the selected exact source.
+Foreign state and changed ownership remain refusals.
 
 ## Plan, record, and safety boundary
 
@@ -228,54 +215,28 @@ upstream evidence, rollback record, and captured upstream rollback entrypoint.
 Failed provider installs and dry runs create no ownership record. A stale record
 blocks a new provider installation rather than being overwritten.
 
-Before package mutation or provider verification replaces or reuses provider
-state, and before a repeat installation replaces application files or restarts
-the service, an exact WsprryPi-owned v3 runtime is placed into its provider's
-inactive update state. If the runtime has an exact selected route, the installer
-first requires the recorded binding and artifact set, the bound installed route
-client, one
-unambiguous active route, closed owned endpoints, an exact loaded module pair,
-and the manager's matching output-disabled transaction evidence. It revalidates
-the ownership record and invokes the route client's synchronous `recover`
-operation. The recovered route must report the same binding, null active and
-configured routes, disabled output, and application inhibition before the
-installer continues with neutral recovery.
+Before package mutation or provider verification, and before replacing application
+files or restarting the service, WsprryPi requests provider update preparation.
+The same workflow applies whether the selected source is unchanged or newer.
 
-If that recovery exposes exact terminal activation evidence from a prior boot,
-the installer reviews and retires the prior activation and route journals,
-removes the exact runtime deployment through its reviewed removal plan, and
-retains provider-only ownership. The later activation stage then performs a
-fresh inhibited deployment instead of attempting to reuse unchanged files
-without a current inhibition transaction. If runtime removal is interrupted
-after the installed provider is removed, the same installation immediately
-accepts only the pending plan whose digest matches recorded runtime ownership,
-recovers it with the exact pinned source helper, and resumes from provider-only
-ownership. A later retry uses the same recovery contract if the process itself
-was interrupted before that publication. Structured provider failures expose
-their returned error detail, conflict identifiers, and remediation in the
-installer's bounded failure diagnostic.
+The public `update-plan` / `update-execute` pair advances through bounded,
+digest-reviewed steps. WsprryPi checks the versioned envelope, recorded identity,
+canonical plan digest, and public postconditions, revalidating its own ownership
+record before each call. It replaces application files only after `prepared`
+proves the runtime deployment absent. Preparation never authorizes transmission.
+The provider may restore the service intent captured before its deployment;
+WsprryPi continues to own the subsequent application installation lifecycle.
 
-The neutral-recovery stage accepts a current `neutral_ready` result, an already
-`recovered-inhibited` retry, a valid post-reboot activation-required state, an
-exactly journaled same-boot route recovery that left a neutral nonzero-generation
-controller, or the narrow same-boot case where the only conflict is that the
-application's active PID changed after completed neutral activation. That last
-case must retain the exact binding, artifact set, activation journal, neutral
-controller, null routes, absent consumer, disabled output, matching controller
-observation, and otherwise unchanged application-service identity.
-
-For a loaded neutral controller, the installer reviews
-`activation-recover-plan`, binds its canonical digest to the installed binding,
-current boot, controller observation, activation journal, and any terminal
-route-recovery journals, archives the activation journal, revalidates
-the ownership record, and calls `activation-recover` with only that digest. It
-then requires both modules and endpoints absent, every route null, transmission
-ineligible, the application inhibited and inactive, and the journal retained as
-`recovered-inhibited`. Any other conflict, route, consumer, binding or artifact
-drift, changed ownership, malformed recovery plan, or incomplete final state
-fails before application mutation. A retry resumes from the retained inhibited
-state. First installations with provider-only v2 ownership and dry runs do not
-perform this runtime transition.
+The provider handles an exact selected idle route, initial neutral activation,
+completed removal at later generations, supported interrupted recovery/removal,
+and validated post-reboot retirement. A failure stops the installer and preserves
+its recovery evidence. The installer does not automatically retry a failed effect;
+a new invocation obtains a new plan. If inverse deployment removed the installed
+helper before interruption, the selected compatible source can finish the exact
+retained inverse bound to recorded deployment ownership. Unknown contracts,
+unproven state, foreign artifacts, unsafe endpoints, or changed ownership fail
+closed. Structured provider failures retain their diagnostic detail in the
+installer's bounded error output.
 
 After the application binary, configuration, service, and exact route companion
 then exist, the installer builds the opt-in bundle from the same immutable source
@@ -285,12 +246,13 @@ compression, version, kernel, and build-note digest. The bundle contains no
 module payload and never writes `/lib/modules`. The installer independently
 validates its binding and complete artifact inventory,
 and calls the upstream runtime provider in this order: `inspect`, `plan`,
-`ensure`, `inspect`, `activation-plan`, `activation-ensure`, and final `inspect`.
+`ensure`, `inspect`, `activation-plan`, `activation-ensure`, and
+`installation-status`.
 Both mutation calls receive only the digest returned by the immediately reviewed
-plan. The final result must be `neutral_ready`, with
-`administrationEligible=true`, `executionReady=false`, no
-requested/configured/persisted/active route, no owner or lease, and output
-disabled.
+plan. The provider publishes an installation receipt only after exact neutral
+readiness: administration eligible, execution unavailable, no route, owner or
+lease, and output disabled. WsprryPi checks the receipt against its reviewed
+bundle and deployment/activation digests.
 
 The bundle must be self-contained for these pre-deployment calls: its bootstrap
 set includes the route client imported by the provider and activation tools.
@@ -311,27 +273,11 @@ neutral state, null route, and disabled-output state. This records WsprryPi
 orchestration; it does not transfer ownership of upstream files, journals,
 modules, units, or systemd state.
 
-A repeat installation accepts an exact WsprryPi-owned v3 development runtime
-idempotently. An exact selected route is recovered and inhibited before
-provider apply. The recovered, inactive runtime deployment and its activation
-journal are then removed through a digest-reviewed plan while the application
-remains inhibited; this makes the later activation a fresh transaction bound
-to the replacement application instance. A completed route removal is also
-accepted as `neutral_ready`, even though switching and removing the route
-advanced the controller generation. This requires the same owned controller
-session, a neutral controller, the completed activation journal, and all three
-retained route, manager, and application journals matching the provider's
-reviewed recovery-plan hashes. Missing or changed evidence remains a refusal.
-In `neutral_ready`, the newly
-activated administrative route controller is expected to remain loaded while
-the transmission consumer, configured route, output, owner, and lease remain
-absent. Reuse still requires the exact source, kernel, DKMS registration,
-source tree, unique module pair, version, ownership record, and subsequent
-bound-runtime validation. An active consumer outside the exact owned
-selected-route recovery contract, foreign state, or identity drift remains a
-refusal. When the selected source differs, pre-update recovery is deferred to
-the predecessor-owned provider migration workflow rather than allowing
-candidate code to interpret predecessor state.
+The receipt records the original activation controller session and generation
+zero. It is installation provenance, not an assertion that the live generation
+must remain zero. Route selection and removal advance that generation; the
+provider validates the resulting journal chain through its update interface.
+Missing or changed evidence remains a refusal.
 
 After neutral administration succeeds, the installer restores any explicit
 saved RP1 route, finishes website and Apache publication and requires
@@ -341,9 +287,12 @@ starts the service idempotently so cached unit conditions cannot suppress the
 restored application before the route-restoration step. With web
 mode enabled it also
 requires the installed loopback `/wsprrypi/version` proxy endpoint to respond.
-A later owned uninstall accepts that exact installer-started service transition
-as recoverable neutral state, while still requiring the bound unit path,
-route-neutral manager state, disabled output, and closed consumer endpoint.
+Passive neutral readiness accepts a later stable start, stop, or restart of the
+bound application service. Strict activation completion still verifies its
+captured restoration intent, and route preflight checks current application
+state before restoring a saved route. An owned uninstall uses the same provider
+update interface; an older installed provider must first be upgraded using a
+compatible exact source.
 A systemd start request that returns success but is skipped by a false unit
 condition is an installation failure, so no success banner or configuration
 URLs are printed. `--no-web` installations require only active service state.
