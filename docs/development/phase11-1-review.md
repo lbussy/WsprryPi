@@ -164,6 +164,8 @@ could not check out the private WsprryPico repository. This was a CI wiring gap;
 the network and browser steps were skipped, not passed.
 
 The administrator supplied `WSPRRY_PICO_READ_TOKEN` as a WsprryPi Actions secret.
-The pinned Pico checkout now uses it with credential persistence disabled. The
-token value is never part of the workflow or repository. A successful subsequent
-network CI run is required to close this follow-up.
+The authenticated checkout in [run 34267169627](https://github.com/WsprryPi/WsprryPi/actions/runs/34267169627)
+still received HTTP 403 before network tests. The administrator then made
+WsprryPico public. The pinned checkout no longer uses the custom token and keeps
+credential persistence disabled. No token value entered the repository. A
+successful subsequent network CI run is required to close this follow-up.

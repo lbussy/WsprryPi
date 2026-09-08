@@ -51,7 +51,6 @@ jobs:
           repository: WsprryPi/WsprryPico
           ref: 0fd8191c5218d3b5f2da9122a2ae55bf728ae3f2
           path: src/build/network-reference/pico
-          token: ${{ secrets.WSPRRY_PICO_READ_TOKEN }}
           persist-credentials: false
       - name: Read-only pinned Pico TLS dependency
         uses: actions/checkout@v7
