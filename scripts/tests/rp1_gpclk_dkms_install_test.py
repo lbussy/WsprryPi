@@ -1438,10 +1438,36 @@ class ApplyPolicyTests(unittest.TestCase):
         }
         return value
 
+    def removed_runtime_update_inspection(self, phase="neutral-restored"):
+        value = self.runtime_update_inspection()
+        # Activation remains generation zero; a switch and removal advance the
+        # same controller session without changing the installation record.
+        controller = copy.deepcopy(value["activation"]["value"]["controllerState"])
+        controller["generation"] = 2
+        value["activation"]["value"]["controllerState"] = controller
+        binding = value["activation"]["value"]["bindingSha256"]
+        boot = value["activation"]["value"]["bootId"]
+        transaction = {"phase": "recovered-inhibited", "observation": controller,
+                       "session": controller["session"], "binding": binding, "boot": boot}
+        manager = {"complete": True, "controller": controller,
+                   "binding": binding, "boot": boot}
+        application = {"operation": "remove", "phase": phase, "controller": None,
+                       "ready": None, "binding": binding, "boot": boot}
+        for name, journal in (("transaction.json", transaction),
+                              ("manager.json", manager),
+                              ("application.json", application)):
+            value["journals"][name] = {"status": "present", "value": journal}
+        value["manager"]["query"]["state"].update({
+            "controller": controller, "pendingTransaction": transaction,
+            "application": application,
+        })
+        return value
+
     def runtime_recovery_plan(self, inspected):
         journal = inspected["journals"]["activation.json"]["value"]
         route_recovery = None
-        if inspected["result"] == "recovery_required":
+        if (inspected["result"] == "recovery_required" or
+                inspected["activation"]["value"]["controllerState"]["generation"] > 0):
             route_recovery = {
                 name: digest(MOD.canonical(inspected["journals"][name]["value"]))
                 for name in ("transaction.json", "manager.json", "application.json")
@@ -1556,6 +1582,71 @@ class ApplyPolicyTests(unittest.TestCase):
         remove.assert_called_once_with(
             args.record, record, identity, mock.ANY, mock.ANY
         )
+
+    def test_repeat_install_recovers_completed_route_removal(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        for phase in ("neutral-restored", "neutral-stopped", "neutral-administrator-masked"):
+            with self.subTest(phase=phase):
+                initial = self.removed_runtime_update_inspection(phase)
+                planned = self.runtime_recovery_plan(initial)
+                recovered = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
+                             "operation": "activation-recover",
+                             "planSha256": planned["planSha256"],
+                             "response": {"status": "recovered-inhibited"}}
+                with mock.patch.object(MOD, "load_ownership_record",
+                                       return_value=(record, identity, None)), \
+                     mock.patch.object(MOD, "runtime_call", side_effect=[
+                         initial, planned, recovered, self.recovered_runtime_update_inspection()
+                     ]) as calls, \
+                     mock.patch.object(MOD, "preserve_owned_activation_journal"), \
+                     mock.patch.object(MOD, "require_unchanged_ownership"), \
+                     mock.patch.object(MOD, "remove_owned_runtime_for_fresh_activation") as remove:
+                    runner = FakeRunner()
+                    MOD.prepare_runtime_update(args, runner)
+                self.assertEqual([call.args[2] for call in calls.call_args_list],
+                                 ["inspect", "activation-recover-plan", "activation-recover", "inspect"])
+                self.assertEqual(runner.calls, [], "completed removal needs no second route recovery")
+                remove.assert_called_once()
+
+    def test_completed_removal_requires_exact_recovery_evidence_before_mutation(self):
+        args = self.runtime_update_args()
+        record = self.runtime_update_record()
+        identity = mock.Mock(st_dev=1, st_ino=2)
+        initial = self.removed_runtime_update_inspection()
+        planned = self.runtime_recovery_plan(initial)
+        cases = []
+        for name in ("transaction.json", "manager.json", "application.json"):
+            missing = copy.deepcopy(initial)
+            missing["journals"][name] = {"status": "absent"}
+            cases.append((f"missing-{name}", missing, planned))
+            changed = copy.deepcopy(initial)
+            changed["journals"][name]["value"]["boot"] = "foreign-boot"
+            cases.append((f"changed-{name}", changed, planned))
+        for key, value in (("session", 43), ("generation", 0), ("flags", 6), ("error", 1)):
+            changed = copy.deepcopy(initial)
+            changed["activation"]["value"]["controllerState"][key] = value
+            cases.append((key, changed, planned))
+        for key, value in (("routeRecoverySha256", None),
+                           ("controllerState", initial["journals"]["activation.json"]["value"]["controller"]),
+                           ("bindingSha256", "f" * 64), ("bootId", "foreign-boot")):
+            changed_plan = copy.deepcopy(planned)
+            changed_plan["plan"][key] = value
+            changed_plan["planSha256"] = digest(MOD.canonical(changed_plan["plan"]))
+            cases.append((f"plan-{key}", initial, changed_plan))
+        for label, inspection, plan in cases:
+            with self.subTest(label=label), \
+                 mock.patch.object(MOD, "load_ownership_record", return_value=(record, identity, None)), \
+                 mock.patch.object(MOD, "runtime_call", side_effect=[inspection, plan]) as calls, \
+                 mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
+                 mock.patch.object(MOD, "remove_owned_runtime_for_fresh_activation") as remove:
+                with self.assertRaises(MOD.ContractError):
+                    MOD.prepare_runtime_update(args, FakeRunner())
+                self.assertTrue(all(call.args[2] in {"inspect", "activation-recover-plan"}
+                                    for call in calls.call_args_list))
+                preserve.assert_not_called()
+                remove.assert_not_called()
 
     def test_repeat_install_recovers_selected_route_before_provider_apply(self):
         args = self.runtime_update_args()

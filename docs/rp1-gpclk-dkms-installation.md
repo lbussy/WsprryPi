@@ -316,7 +316,13 @@ idempotently. An exact selected route is recovered and inhibited before
 provider apply. The recovered, inactive runtime deployment and its activation
 journal are then removed through a digest-reviewed plan while the application
 remains inhibited; this makes the later activation a fresh transaction bound
-to the replacement application instance. In `neutral_ready`, the newly
+to the replacement application instance. A completed route removal is also
+accepted as `neutral_ready`, even though switching and removing the route
+advanced the controller generation. This requires the same owned controller
+session, a neutral controller, the completed activation journal, and all three
+retained route, manager, and application journals matching the provider's
+reviewed recovery-plan hashes. Missing or changed evidence remains a refusal.
+In `neutral_ready`, the newly
 activated administrative route controller is expected to remain loaded while
 the transmission consumer, configured route, output, owner, and lease remain
 absent. Reuse still requires the exact source, kernel, DKMS registration,

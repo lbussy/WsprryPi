@@ -3414,7 +3414,20 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
     activation_controller = activation.get("controller", {})
     controller_endpoint = inspected.get("endpoints", {}).get("controller", {})
     controller_state = activation.get("controllerState")
-    recovered_route_state = result == "recovery_required"
+    # A completed removal is neutral_ready at a later generation in the same
+    # session. Attribute it to the retained route journals and the provider's
+    # digest-bound recovery plan, not to the original generation-zero snapshot.
+    application = inspected.get("journals", {}).get("application.json", {}).get("value", {})
+    completed_route_removal = (
+        result == "neutral_ready"
+        and isinstance(application, dict)
+        and application.get("operation") == "remove"
+        and application.get("phase") in {
+            "neutral-restored", "neutral-stopped", "neutral-administrator-masked"
+        }
+        and journal_value.get("phase") == "complete-neutral"
+    )
+    recovered_route_state = result == "recovery_required" or completed_route_removal
     require(
         activation_observation.get("status") == "observed"
         and controller.get("status") == "loaded"
@@ -3446,7 +3459,7 @@ def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
         expected_route_recovery = {}
         for name in ("transaction.json", "manager.json", "application.json"):
             item = journals.get(name, {}) if isinstance(journals, dict) else {}
-            if item.get("status") == "absent":
+            if item.get("status") == "absent" and not completed_route_removal:
                 expected_route_recovery[name] = None
             else:
                 require(item.get("status") == "present" and
