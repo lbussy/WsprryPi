@@ -1306,7 +1306,8 @@ legend {
 .rp1-route-panel { padding: 1rem; background: color-mix(in srgb, var(--bs-secondary-bg) 58%, var(--bs-body-bg)); border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); }
 .rp1-route-panel__heading, .rp1-route-actions { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
 .rp1-route-control-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
-.rp1-route-control-row .form-select { flex: 0 1 9rem; width: 9rem; }
+/* Keep GPIO20 readable beside the validation icon and dropdown arrow. */
+.rp1-route-control-row .form-select { flex: 0 0 11rem; width: 11rem; }
 .rp1-route-state { padding: .3rem .65rem; font-family: var(--font-display); font-weight: var(--weight-semibold); border: 1px solid var(--bs-border-color); border-radius: 999px; white-space: nowrap; }
 .rp1-route-state[data-state="active"], .rp1-route-state[data-state="runtime_ready"], .rp1-route-state[data-state="runtime_neutral"], .rp1-route-state[data-state="output_inhibited_validated"] { color: var(--wspr-state-success); }
 .rp1-route-state[data-state="checking"], .rp1-route-state[data-state="applying"], .rp1-route-state[data-state="rollback"] { color: rgb(var(--wspr-accent-rgb)); }
