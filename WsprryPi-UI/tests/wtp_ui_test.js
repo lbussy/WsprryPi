@@ -36,7 +36,7 @@ function browser(storage = new Map(), storageBlocked = false) {
     return { root, fields, calls, writes, events, timers };
 }
 (async () => {
-    const storage = new Map();
+    const storage = new Map([["wsprrypi.pico-development-controls", "true"]]);
     const { root, fields, calls, writes, events, timers } = browser(storage);
     events.DOMContentLoaded();
     assert.equal(root.WtpUi.developmentControlsVisible, false);
@@ -64,7 +64,7 @@ function browser(storage = new Map(), storageBlocked = false) {
         assert.equal(JSON.stringify(root.WtpUi.read()), JSON.stringify(settings));
     }
     assert(calls.every(c => c.options.method === "GET"));
-    assert.deepEqual(writes, ["true", "false", "true"]);
+    assert.deepEqual(writes, []);
     fields.get("USB Serial").value = "";
     assert.equal(root.WtpUi.validate(), false);
     root.WtpUi.developmentControlsVisible = false;
@@ -82,8 +82,9 @@ function browser(storage = new Map(), storageBlocked = false) {
         root.WtpUi.developmentControlsVisible = value;
         const reloaded = browser(storage);
         reloaded.events.DOMContentLoaded();
-        assert.equal(reloaded.root.WtpUi.developmentControlsVisible, value);
-        assert.equal(reloaded.fields.get("wtp-controls").hidden, !value);
+        assert.equal(reloaded.root.WtpUi.developmentControlsVisible, false);
+        assert.equal(reloaded.fields.get("wtp-controls").hidden, true);
+        assert.equal(reloaded.fields.get("wtp_use").disabled, true);
     }
     const blocked = browser(new Map(), true);
     blocked.events.DOMContentLoaded();
@@ -96,5 +97,5 @@ function browser(storage = new Map(), storageBlocked = false) {
     assert.equal(early.calls.length, 0);
     early.events.DOMContentLoaded();
     assert.equal(early.fields.get("wtp-controls").hidden, false);
-    console.log("WTP UI console boolean, persistence, polling, validation and draft-preservation tests passed");
+    console.log("WTP UI console boolean, reload reset, legacy preference isolation, polling, validation and draft-preservation tests passed");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -7,7 +7,6 @@
         "USB Vendor ID": 0, "USB Product ID": 0,
         "Start Uncertainty ns": 1000000, "Allow Frequency Adjustment": false
     });
-    const storageKey = "wsprrypi.pico-development-controls";
     function errors(settings, selected) {
         const result = {};
         for (const [key, max] of [["Endpoint", 512], ["USB Serial", 128], ["Device ID", 32]]) {
@@ -129,13 +128,11 @@
         });
         render();
     }
-    try { visible = root.localStorage.getItem(storageKey) === "true"; } catch (_) { /* Preference is optional. */ }
     root.WtpUi = { selected, read, validate, populate,
         get developmentControlsVisible() { return visible; },
         set developmentControlsVisible(value) {
             if (typeof value !== "boolean") throw new TypeError("developmentControlsVisible must be a boolean.");
             visible = value;
-            try { root.localStorage.setItem(storageKey, String(visible)); } catch (_) { /* Keep session preference. */ }
             if (!initialized) return;
             render();
             if (visible || selected()) request(); else clearTimeout(timer);

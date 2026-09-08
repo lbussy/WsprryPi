@@ -19,9 +19,10 @@ window.WtpUi.developmentControlsVisible = false; // Hide Pico controls.
 The boolean updates the Transmitter tab immediately; there is no visible
 visibility switch. Read `window.WtpUi.developmentControlsVisible` to check it.
 Only boolean values are accepted (not strings such as `"false"`). It defaults to
-false and persists across reloads in that browser's local storage, using the
-existing preference. If browser storage is unavailable, it lasts for the page
-session only.
+false on every page load and lasts only for that page. Reloading hides the
+entire Pico panel, including **Use Pico over USB**, until the console boolean
+is explicitly set to true again. Previously saved browser visibility preferences
+are ignored; this boolean does not read or write browser storage.
 
 **Use Pico over USB** is the separate, persisted backend selection. Hiding the
 controls preserves saved selection and field drafts; a passive notice identifies
