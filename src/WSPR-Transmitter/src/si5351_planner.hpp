@@ -48,6 +48,8 @@ public:
         Si5351Device::Output tx_output = Si5351Device::Output::CLK0;
         bool park_unused_outputs = true;
         bool disable_tx_output_when_idle = true;
+        // Append optional fields to preserve existing aggregate initialization.
+        bool prefer_integer_multisynth = false;
     };
 
     /**
@@ -172,7 +174,8 @@ private:
     ToneRegisterSet buildToneRegisterSet(
         double frequency_hz,
         std::uint32_t r_divider,
-        bool allow_pll_retune_candidate) const;
+        bool allow_pll_retune_candidate,
+        std::uint32_t integer_multisynth = 0) const;
 
     /**
      * @brief Quantize a requested frequency to the achievable output

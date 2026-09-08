@@ -400,15 +400,48 @@ Si5351Planner::Plan Si5351Planner::buildPlan(
     plan.idle_writes = buildIdleWrites();
     plan.tone_sets.reserve(tones.size());
 
-    const std::uint32_t r_divider =
-        select_r_divider(tones, config_.parked_pll_hz);
+    std::uint32_t r_divider = select_r_divider(tones, config_.parked_pll_hz);
+    std::uint32_t integer_multisynth = 0;
+    if (config_.prefer_integer_multisynth)
+    {
+        // Choose one even integer divider and R-divider for the entire set.
+        // Prefer the smallest R, then the VCO nearest the parked frequency.
+        r_divider = 0;
+        if ((mode == Mode::WSPR || mode == Mode::TONE) &&
+            !tones.empty() && effectiveReferenceHz() > 0.0)
+        {
+            for (std::uint32_t r = 1; r <= 128 && r_divider == 0; r *= 2)
+            {
+                double best_distance = std::numeric_limits<double>::infinity();
+                for (std::uint32_t divider = 6; divider <= 900; divider += 2)
+                {
+                    bool valid = true;
+                    double distance = 0.0;
+                    for (const auto& tone : tones)
+                    {
+                        const double pll = tone.frequency_hz * r * divider;
+                        const double ratio = pll / effectiveReferenceHz();
+                        if (!std::isfinite(pll) || pll < kMinPllFrequencyHz ||
+                            pll > kMaxPllFrequencyHz || ratio < kMinPllMultiplier ||
+                            ratio > kMaxPllMultiplier)
+                        { valid = false; break; }
+                        distance = std::max(distance,
+                            std::fabs(pll - config_.parked_pll_hz));
+                    }
+                    if (valid && distance < best_distance)
+                    { best_distance = distance; integer_multisynth = divider; r_divider = r; }
+                }
+            }
+        }
+    }
 
     for (const ToneEntry& tone : tones)
     {
         plan.tone_sets.push_back(buildToneRegisterSet(
             tone.frequency_hz,
             r_divider,
-            mode == Mode::WSPR || mode == Mode::TONE));
+            mode == Mode::WSPR || mode == Mode::TONE,
+            integer_multisynth));
     }
 
     return plan;
@@ -520,7 +553,8 @@ Si5351Planner::ToneRegisterSet
 Si5351Planner::buildToneRegisterSet(
     double frequency_hz,
     std::uint32_t r_divider,
-    bool allow_pll_retune_candidate) const
+    bool allow_pll_retune_candidate,
+    std::uint32_t integer_multisynth) const
 {
     ToneRegisterSet tone;
     tone.requested_hz = frequency_hz;
@@ -543,18 +577,20 @@ Si5351Planner::buildToneRegisterSet(
     if (ms_params.valid && !set_r_divider_code(ms_params, r_divider))
         ms_params.valid = false;
 
-    if (!ms_params.valid)
+    if (!ms_params.valid || integer_multisynth != 0)
     {
         tone.actual_hz = 0.0;
 
-        // Direct 2 m WSPR requires a distinct PLL setting for each tone with
-        // an exact divide-by-6 MultiSynth.  The backend must inhibit the
-        // output around this complete PLL/MultiSynth/reset transition.
+        // Tune through the PLL with a common integer MultiSynth. The default
+        // fallback is divide-by-6 for 2 m. Full initial programming requires
+        // inhibition; compatible PLL-only transitions are a backend option.
         const double effective_reference_hz = effectiveReferenceHz();
         if (!allow_pll_retune_candidate || effective_reference_hz <= 0.0)
             return tone;
 
-        const double target_pll_hz = frequency_hz * 6.0;
+        const std::uint32_t divider = integer_multisynth != 0 ? integer_multisynth : 6;
+        const std::uint32_t candidate_r = integer_multisynth != 0 ? r_divider : 1;
+        const double target_pll_hz = frequency_hz * divider * candidate_r;
         if (target_pll_hz < static_cast<double>(kMinPllFrequencyHz) ||
             target_pll_hz > static_cast<double>(kMaxPllFrequencyHz))
         {
@@ -565,8 +601,10 @@ Si5351Planner::buildToneRegisterSet(
             target_pll_hz / effective_reference_hz,
             kMinPllMultiplier,
             kMaxPllMultiplier);
-        const DividerParameters candidate_ms_params =
-            build_multisynth_parameters(6.0);
+        DividerParameters candidate_ms_params =
+            build_multisynth_parameters(divider);
+        if (!set_r_divider_code(candidate_ms_params, candidate_r))
+            candidate_ms_params.valid = false;
         if (!pll_params.valid || !candidate_ms_params.valid)
             return tone;
 
@@ -576,7 +614,7 @@ Si5351Planner::buildToneRegisterSet(
         candidate.actual_pll_hz =
             effective_reference_hz *
             pll_params.actual_ratio;
-        candidate.r_divider = 1;
+        candidate.r_divider = candidate_r;
         candidate.pll = divider_plan(pll_params);
         candidate.multisynth = divider_plan(candidate_ms_params);
         append_parameter_writes(
@@ -600,9 +638,9 @@ Si5351Planner::buildToneRegisterSet(
             kPllResetRegister,
             kResetPllA});
         tone.requires_output_inhibit = true;
-        tone.r_divider = 1;
+        tone.r_divider = candidate_r;
         tone.actual_hz = candidate.actual_pll_hz /
-            candidate_ms_params.actual_ratio;
+            (candidate_ms_params.actual_ratio * candidate_r);
         return tone;
     }
 
@@ -636,7 +674,14 @@ double Si5351Planner::quantizeFrequency(
     if (!ms_params.valid || ms_params.actual_ratio <= 0.0)
         return 0.0;
 
-    return static_cast<double>(config_.parked_pll_hz) /
+    const double reference_hz = effectiveReferenceHz();
+    if (reference_hz <= 0.0) return 0.0;
+    const DividerParameters pll_params = build_divider_parameters(
+        static_cast<double>(config_.parked_pll_hz) / reference_hz,
+        kMinPllMultiplier, kMaxPllMultiplier);
+    if (!pll_params.valid) return 0.0;
+
+    return reference_hz * pll_params.actual_ratio /
         (ms_params.actual_ratio * static_cast<double>(r_divider));
 }
 

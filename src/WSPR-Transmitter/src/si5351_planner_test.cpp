@@ -871,8 +871,87 @@ namespace
     }
 }
 
+
+void test_integer_multisynth_comparison()
+{
+    const Si5351Planner::Config legacy{27000000, 0.0, 850000000,
+        Si5351Device::Output::CLK1, false, false};
+    expect(!legacy.park_unused_outputs && !legacy.disable_tx_output_when_idle &&
+        !legacy.prefer_integer_multisynth, "legacy aggregate config keeps its meanings");
+    Si5351Planner::Config config;
+    config.prefer_integer_multisynth = true;
+    config.calibration_ppm = 3.470680;
+    for (double base : {137500.0, 7040100.0, 144490500.0})
+    {
+        const auto plan = Si5351Planner(config).buildPlan(Si5351Planner::Mode::WSPR,
+            {{base}, {base + 1.46484375}, {base + 2.9296875}, {base + 4.39453125}});
+        for (const auto& tone : plan.tone_sets)
+        {
+            const auto& c = tone.pll_retune_candidate;
+            expect(c.valid && tone.requires_output_inhibit, "integer candidate needs guarded first application");
+            expect(c.multisynth.numerator == 0 && c.multisynth.integer % 2 == 0,
+                "candidate MultiSynth must be even integer");
+            expect(c.actual_pll_hz >= 600000000 && c.actual_pll_hz <= 900000000,
+                "candidate VCO in documented range");
+            expect(same_register_writes(c.multisynth_writes,
+                plan.tone_sets.front().pll_retune_candidate.multisynth_writes),
+                "complete tone set must share packed MultiSynth including R");
+            expect(std::fabs(tone.actual_hz - tone.requested_hz) < .0001,
+                "integer output planning retains frequency precision");
+        }
+    }
+    for (const auto& tones : std::vector<std::vector<Si5351Planner::ToneEntry>>{
+            {{7040100}, {144490500}}, {{0}}, {{-1}},
+            {{std::numeric_limits<double>::quiet_NaN()}}, {{1e300}}})
+    {
+        const auto plan = Si5351Planner(config).buildPlan(Si5351Planner::Mode::TONE, tones);
+        for (const auto& tone : plan.tone_sets)
+            expect(tone.writes.empty() && tone.actual_hz == 0,
+                "no common divider or invalid input must fail closed");
+    }
+    const auto unsupported = Si5351Planner(config).buildPlan(Si5351Planner::Mode::QRSS, {{7040100}});
+    expect(unsupported.tone_sets[0].writes.empty(), "experiment does not broaden unreviewed modes");
+}
+
+void test_reported_frequency_from_packed_chain()
+{
+    bool exercised_pll_residual = false;
+    for (double ppm : {-200.0, -17.1234567, 0.0, 3.470680, 199.9999})
+    for (double base : {137500.0, 7040100.0, 14097100.0, 28000000.0, 100000000.0, 144490500.0})
+    {
+        Si5351Planner::Config cfg; cfg.calibration_ppm = ppm;
+        const auto plan = Si5351Planner(cfg).buildPlan(Si5351Planner::Mode::WSPR,
+            {{base}, {base+1.46484375}, {base+2.9296875}, {base+4.39453125}});
+        double previous = 0;
+        for (const auto& tone : plan.tone_sets)
+        {
+            const auto pll = decode_divider(tone.pll_retune_candidate.valid
+                ? tone.pll_retune_candidate.pll_writes : plan.startup_writes, 26);
+            const auto ms = decode_divider(tone.writes, 42);
+            std::uint8_t r_byte = 0; register_value(tone.writes,44,r_byte);
+            const unsigned r = 1U << ((r_byte >> 4) & 7);
+            expect(pll.valid && ms.valid, "packed chain decodes");
+            const double pll_ratio = pll.a + static_cast<double>(pll.b)/pll.c;
+            const double ms_ratio = ms.a + static_cast<double>(ms.b)/ms.c;
+            const double decoded_hz = cfg.reference_hz * (1 - ppm*1e-6) * pll_ratio / ms_ratio / r;
+            expect(std::fabs(tone.actual_hz-decoded_hz) < std::max(1e-8,base*2e-15),
+                "reported frequency includes the complete programmed chain");
+            if (!tone.pll_retune_candidate.valid &&
+                std::fabs(decoded_hz-static_cast<double>(cfg.parked_pll_hz)/ms_ratio/r) > 1e-7)
+                exercised_pll_residual = true;
+            if (previous != 0 && (base == 7040100.0 || base == 144490500.0))
+                expect(std::fabs(tone.actual_hz-previous-1.46484375) < .0001,
+                "complete-chain report retains WSPR spacing");
+            previous = tone.actual_hz;
+        }
+    }
+    expect(exercised_pll_residual, "fixture must expose the omitted PLL residual");
+}
+
 int main()
 {
+    test_reported_frequency_from_packed_chain();
+    test_integer_multisynth_comparison();
     test_documented_ratio_domain();
     test_special_integer_encoding();
     test_pll_frequency_domain();

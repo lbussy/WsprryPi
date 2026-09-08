@@ -326,6 +326,15 @@ wsprrypi::BackendCompileResult WsprSi5351Backend::configure(
     si5351_plan_ = Si5351Planner(planner_config).buildPlan(
         planner_mode,
         tones);
+    for (auto& tone : si5351_plan_.tone_sets)
+    {
+        for (auto& write : tone.writes)
+        {
+            if (write.address >= 16 && write.address <= 18)
+                write.value = static_cast<std::uint8_t>((write.value & 0xfc) |
+                    static_cast<unsigned>(active_drive_strength_));
+        }
+    }
 
     {
         std::ostringstream stream;
@@ -626,7 +635,9 @@ wsprrypi::ExecutionResult WsprSi5351Backend::execute(
                 }
             }
 
-            if (!runEnvelopeEvent(event, rf_enabled, result.error))
+            if (!runEnvelopeEvent(event,
+                    add_ns(start_time, event.offset_from_start.count()),
+                    rf_enabled, result.error))
             {
                 log_si5351(owner_, WsprTransmitLogLevel::ERROR, result.error);
                 idle_device();
@@ -697,6 +708,7 @@ wsprrypi::ExecutionResult WsprSi5351Backend::execute(
 
 bool WsprSi5351Backend::runEnvelopeEvent(
     const wsprrypi::RfEvent& event,
+    const timespec& event_start,
     bool& rf_enabled,
     std::string& error)
 {
@@ -751,6 +763,22 @@ bool WsprSi5351Backend::runEnvelopeEvent(
             ? event.envelope.fade_slice
             : std::chrono::duration_cast<std::chrono::nanoseconds>(
                   std::chrono::milliseconds(5));
+    auto remaining_until = [&](std::chrono::nanoseconds offset) {
+        timespec now{};
+        if (::clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+            throw std::system_error(errno, std::generic_category(), "clock_gettime");
+        return diff_ns(add_ns(event_start, offset.count()), now);
+    };
+    auto wait_until = [&](std::chrono::nanoseconds offset) {
+        while (!stop_requested_ && !owner_.backendShouldStop())
+        {
+            const auto remaining = remaining_until(offset);
+            if (remaining <= 0) return true;
+            if (!owner_.backendWaitInterruptableFor(std::chrono::nanoseconds(remaining)))
+                return false;
+        }
+        return false;
+    };
     std::chrono::nanoseconds elapsed{0};
     while (elapsed < event.duration &&
            !stop_requested_ &&
@@ -758,6 +786,13 @@ bool WsprSi5351Backend::runEnvelopeEvent(
     {
         const auto remaining = event.duration - elapsed;
         const auto slice = std::min(remaining, slice_limit);
+        // Deadlines include time spent on I2C. Skip expired slices rather than
+        // replaying stale pulses or accumulating transfer and scheduler delays.
+        if (remaining_until(elapsed + slice) <= 0)
+        {
+            elapsed += slice;
+            continue;
+        }
         const auto midpoint = elapsed + slice / 2;
         const double level =
             envelope_level_at(event.envelope, event.duration, midpoint);
@@ -766,12 +801,13 @@ bool WsprSi5351Backend::runEnvelopeEvent(
                 static_cast<double>(slice.count()) * level));
         const auto off_duration = slice - on_duration;
 
-        if (on_duration > std::chrono::nanoseconds::zero())
+        if (on_duration > std::chrono::nanoseconds::zero() &&
+            remaining_until(elapsed + on_duration) > 0)
         {
             if (!enable_output())
                 return false;
 
-            if (!owner_.backendWaitInterruptableFor(on_duration))
+            if (!wait_until(elapsed + on_duration))
                 return true;
         }
 
@@ -780,14 +816,16 @@ bool WsprSi5351Backend::runEnvelopeEvent(
             if (!disable_output())
                 return false;
 
-            if (!owner_.backendWaitInterruptableFor(off_duration))
+            if (!wait_until(elapsed + slice))
                 return true;
         }
 
         elapsed += slice;
     }
 
-    return true;
+    // Even if the final fade slice expired during a slow transfer, finish off.
+    return event.envelope.fade_out > std::chrono::nanoseconds::zero()
+        ? disable_output() : true;
 }
 
 void WsprSi5351Backend::stop() noexcept
@@ -1088,6 +1126,7 @@ bool WsprSi5351Backend::applyTone(
     std::size_t tone_index,
     bool rf_enabled)
 {
+    const auto programming_start = std::chrono::steady_clock::now();
     if (tone_index >= si5351_plan_.tone_sets.size())
         return false;
 
@@ -1101,25 +1140,61 @@ bool WsprSi5351Backend::applyTone(
 
     if (!config_.dry_run)
     {
-        if (tone.requires_output_inhibit && !disableTransmitOutput())
+        bool pll_only = false;
+        if (config_.pll_only_updates && tone.pll_retune_candidate.valid &&
+            current_tone_index_ < si5351_plan_.tone_sets.size())
+        {
+            const auto& previous = si5351_plan_.tone_sets[current_tone_index_];
+            const auto& lhs = previous.pll_retune_candidate.multisynth_writes;
+            const auto& rhs = tone.pll_retune_candidate.multisynth_writes;
+            pll_only = previous.pll_retune_candidate.valid &&
+                previous.r_divider == tone.r_divider && lhs.size() == rhs.size() &&
+                std::equal(lhs.begin(), lhs.end(), rhs.begin(),
+                    [](const auto& a, const auto& b) {
+                        return a.address == b.address && a.value == b.value;
+                    });
+        }
+        const bool inhibited = tone.requires_output_inhibit && !pll_only;
+        if (inhibited && !disableTransmitOutput())
             return false;
 
         if (stop_requested_ || owner_.backendShouldStop())
             return false;
 
-        for (const Si5351Device::RegisterWrite& write : tone.writes)
+        const auto& writes = pll_only ? tone.pll_retune_candidate.pll_writes : tone.writes;
+        for (std::size_t begin = 0; begin < writes.size();)
         {
-            if (stop_requested_ || owner_.backendShouldStop())
+            if (stop_requested_ || owner_.backendShouldStop()) return false;
+            // Active bursts can expose a transient unlock before the status read.
+            // Keep active-output programming on the measured individual-write path.
+            const std::size_t end = config_.device.optimize_register_writes &&
+                (inhibited || !rf_enabled)
+                ? Si5351Device::writeGroupEnd(writes, begin) : begin + 1;
+            if (!(end == begin + 1
+                ? device_.writeRegister(writes[begin].address, writes[begin].value)
+                : device_.writeRegisters({writes.begin() + begin, writes.begin() + end})))
                 return false;
-
-            if (!device_.writeRegister(write.address, write.value))
-                return false;
-
-            if (stop_requested_ || owner_.backendShouldStop())
-                return false;
+            if (stop_requested_ || owner_.backendShouldStop()) return false;
+            begin = end;
         }
 
-        if (tone.requires_output_inhibit &&
+        if (rf_enabled && !inhibited) {
+            std::uint8_t status = 0;
+            if (!device_.readRegister(0,status) || (status & 0xa8) != 0) {
+                std::ostringstream message;
+                message << "Si5351 active readiness failure, register 0="
+                        << static_cast<unsigned>(status) << "; inhibiting output.";
+                log_si5351(owner_, WsprTransmitLogLevel::ERROR, message.str());
+                disableTransmitOutput();
+                return false;
+            }
+        } else if (!waitForPllReady()) {
+            return false;
+        }
+
+        if (stop_requested_ || owner_.backendShouldStop())
+            return false;
+        if (inhibited &&
             rf_enabled &&
             !enableTransmitOutput())
         {
@@ -1133,10 +1208,35 @@ bool WsprSi5351Backend::applyTone(
         stream << "Si5351 tone " << tone_index << ": requested RF="
                << format_frequency(tone.requested_hz)
                << ", calculated output="
-               << format_frequency(tone.actual_hz) << ".";
+               << format_frequency(tone.actual_hz) << ", programming_us="
+               << std::chrono::duration_cast<std::chrono::microseconds>(
+                   std::chrono::steady_clock::now() - programming_start).count()
+               << ".";
         log_si5351(owner_, WsprTransmitLogLevel::DEBUG, stream.str());
     }
     return true;
+}
+
+bool WsprSi5351Backend::waitForPllReady()
+{
+    // AN619 register 0: SYS_INIT bit 7, LOL_A bit 5, LOS_XTAL bit 3.
+    // This backend drives PLLA from XA (passive crystal or external TCXO).
+    constexpr std::uint8_t not_ready = 0xa8;
+    for (unsigned attempt = 0; attempt < 50; ++attempt)
+    {
+        if (stop_requested_ || owner_.backendShouldStop())
+            return false;
+        std::uint8_t status = 0;
+        if (!device_.readRegister(0, status))
+            return false;
+        if ((status & not_ready) == 0)
+            return true;
+        if (!owner_.backendWaitInterruptableFor(std::chrono::milliseconds(1)))
+            return false;
+    }
+    log_si5351(owner_, WsprTransmitLogLevel::ERROR,
+        "Si5351 PLLA/reference readiness timed out; output will remain inhibited.");
+    return false;
 }
 
 bool WsprSi5351Backend::enableTransmitOutput()

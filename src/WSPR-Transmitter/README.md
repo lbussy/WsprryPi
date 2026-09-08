@@ -279,3 +279,34 @@ metadata and an appropriate license file. Run the hardware-free suite from this
 component's `src` directory before considering any separately authorized
 physical-backend qualification. WsprryPi-specific integration should remain
 outside the extracted component.
+
+## Si5351 comparison capabilities
+
+The planner reports output frequency from the calibrated reference multiplied
+by the programmed PLL ratio, divided by the programmed MultiSynth and R-divider.
+Bounded rational approximation is used for the fractional ratios. The configured
+output drive strength is retained when applying tone control registers.
+
+Initially inhibited programming waits for Si5351 initialization/reference/PLLA
+readiness with at most 50 interruptible 1 ms waits. A non-ready status while RF is
+active immediately inhibits and fails the execution. Duty-cycle fades use the
+scheduled event deadlines, including I2C overhead; missed slices are skipped.
+These fades still switch RF fully on/off and do not produce an analog amplitude
+envelope. Spectral improvement must be measured, not inferred from the shape name.
+
+Maintainer-only typed options and the standalone backend harness support:
+
+- `--pll-only`: compatible integer-MultiSynth plans retune PLLA without repeated
+  reset or output inhibition. First and incompatible tones remain guarded.
+- `--integer-ms`: choose a common even integer MultiSynth/R-divider over the full
+  TONE/WSPR tone set, then tune through the fractional PLL.
+- `--burst`: burst contiguous parameter bytes within one PLL/MultiSynth block
+  while RF is off/inhibited, and elide unchanged stable clock controls. Active
+  programming retains individual writes after a live burst/readiness failure.
+  Cache elision requires exclusive register ownership; errors invalidate cache.
+
+These three experiments remain opt-in; the application retains fixed-PLL HF
+planning and full inhibited 2 m transitions. No persisted setting or UI control
+was added. Same-path conducted evidence for wspr4 CLK0 at 40 m and 2 m is linked
+from `docs/development/si5351-results` in the parent repository. It does not
+qualify other hardware, full encoded WSPR frames, or temperature extremes.

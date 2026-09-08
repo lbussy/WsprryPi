@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <time.h>
 #include <vector>
 
 class IControllerBridge;
@@ -54,6 +55,10 @@ public:
          * flow, but it does not open I2C or enable RF output.
          */
         bool dry_run = false;
+
+        // Maintainer opt-in: adjacent compatible integer-MS plans may retune
+        // PLLA without reset/inhibition. First/incompatible tones remain guarded.
+        bool pll_only_updates = false;
     };
 
     /**
@@ -237,6 +242,7 @@ private:
      *
      * @return True on success
      */
+    bool waitForPllReady();
     bool enableTransmitOutput();
 
     /**
@@ -248,6 +254,7 @@ private:
 
     bool runEnvelopeEvent(
         const wsprrypi::RfEvent& event,
+        const timespec& event_start,
         bool& rf_enabled,
         std::string& error);
 
