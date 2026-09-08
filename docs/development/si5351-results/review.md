@@ -143,3 +143,26 @@ ordinary reference strategy, with the tiny reporting residual checked in softwar
 - `origin/devel` advanced during this campaign with unrelated WTP work. The
   branch and measurements remain pinned to a523904; no new-base integration or
   release-readiness claim is made.
+
+
+Final live reassessment: `step5-r2-2m` failed an active readiness check with
+register 0 = 193 (0xC1), asserting SYS_INIT. This occurred with individual active
+writes, so it cannot be attributed exclusively to bursts. Source and binary
+identity remained bound; cleanup verified both outputs off and service restored.
+A passing retry must not replace this failure. Retain the failed
+attempt and close the adoption decision by keeping all three strategies opt-in.
+The final guarded-default 40 m run also failed with register 0 = 193 during
+transitions, with all three experimental switches off. Guarded-default 2 m was
+not run. Cleanup passed. RF-off diagnostics observed SYS_INIT intermittently
+using both split and repeated-start reads (11/500 each, at different indices).
+The module identity is unknown. No further RF retries or weakening of the
+readiness gate is justified by these observations. The unresolved cause and
+failed final qualification remain explicit; no production adoption or deployment
+readiness is claimed. Full software validation cannot substitute for this gap.
+
+Software reassessment passed the component tests, portable parent semantics and
+full Linux parent semantics with hardware access disabled. Final report review
+checked all measurement links and identity/cleanup manifests, kept failed final
+qualification explicit, and inspected representative rendered comparisons. No
+further actionable software issue was found; SYS_INIT characterization remains
+an unresolved live-hardware qualification requirement.

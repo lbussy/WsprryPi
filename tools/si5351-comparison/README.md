@@ -45,3 +45,8 @@ GPSDO-corrected mean offsets, drift, and intentional tone spacing are distinct.
 Preserve rejected captures separately. A successful conducted comparison does
 not establish other bands, drive levels, outputs, boards, filters, antennas,
 receiver configurations, temperature behavior, or release readiness.
+
+`report.py ARTIFACT_ROOT OUTPUT_DIRECTORY` assembles this campaign's explicit
+complete-run list, cleanup gates, raw-capture manifest, programming-time logs and
+rejected attempts into compact review artifacts. It does not classify partial
+or failed runs as successful and does not perform live hardware operations.
