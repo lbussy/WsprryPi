@@ -32,4 +32,25 @@ Tests include full 162-symbol default reset ordering, first-only reset in the
 opt-in path, bounded unlocked startup, readiness interruption, failed PLL writes,
 lock loss during fast retuning, and output-disable cleanup. Planner, transition
 and startup qualification tests passed; affected tests were rerun after repairs.
-RF disposition remains pending until the new same-path captures are analyzed.
+Both bands captured all four cases with shutdown verified. The 2 m transition
+trace loses the repeated deep notches with PLL-only tuning; retain it as an
+explicit experiment, not a production default. The 40 m default strategy is
+unchanged. Carrier drift is reported separately, with fixed PPM throughout.
+
+## Step 2: common even integer MultiSynth experiment
+
+A typed opt-in planner setting selects a common even MultiSynth and R-divider
+for the complete TONE/WSPR set, with PLL limits checked for every tone. Other
+modes are not broadened. Default parked-PLL planning remains available.
+
+Adversarial assessment covered incompatible tone sets, unsupported modes,
+nonfinite/negative/zero frequencies, small frequencies needing R division,
+packed divider equality, VCO limits and realized frequency error. Tests cover
+these cases. The common-divider search fails closed when no valid choice exists.
+
+Measurement review replaced box averaging with a 300 Hz passband / 450 Hz stopband
+channel filter before 1 kHz decimation to reject GPSDO leakage. All captures are
+reprocessed identically. The 5 ms envelope smoother limits gap resolution; phase
+steps are exploratory extrapolations, not calibrated phase-noise measurements.
+Capture cleanup now attempts every device/service restoration independently and
+records errors even if an earlier cleanup fails.

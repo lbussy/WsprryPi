@@ -58,6 +58,7 @@ namespace
         bool dry_run = false;
         double ppm = 0.0;
         bool pll_only = false;
+        bool integer_ms = false;
         std::string scenario;
         std::string fade = "none";
     };
@@ -206,6 +207,7 @@ namespace
                     throw std::invalid_argument("I2C address out of range.");
                 options.i2c_address = static_cast<std::uint8_t>(address);
             }
+            else if (arg == "--integer-ms") options.integer_ms = true;
             else if (arg == "--pll-only") options.pll_only = true;
             else if (arg == "--ppm") options.ppm = parse_double_arg(arg, require_value());
             else if (arg == "--scenario") options.scenario = require_value();
@@ -463,6 +465,7 @@ namespace
         config.power_level = options.power_level;
         config.dry_run = options.dry_run;
         config.pll_only_updates = options.pll_only;
+        config.planner.prefer_integer_multisynth = options.integer_ms;
         return config;
     }
 

@@ -871,8 +871,47 @@ namespace
     }
 }
 
+
+void test_integer_multisynth_comparison()
+{
+    Si5351Planner::Config config;
+    config.prefer_integer_multisynth = true;
+    config.calibration_ppm = 3.470680;
+    for (double base : {137500.0, 7040100.0, 144490500.0})
+    {
+        const auto plan = Si5351Planner(config).buildPlan(Si5351Planner::Mode::WSPR,
+            {{base}, {base + 1.46484375}, {base + 2.9296875}, {base + 4.39453125}});
+        for (const auto& tone : plan.tone_sets)
+        {
+            const auto& c = tone.pll_retune_candidate;
+            expect(c.valid && tone.requires_output_inhibit, "integer candidate needs guarded first application");
+            expect(c.multisynth.numerator == 0 && c.multisynth.integer % 2 == 0,
+                "candidate MultiSynth must be even integer");
+            expect(c.actual_pll_hz >= 600000000 && c.actual_pll_hz <= 900000000,
+                "candidate VCO in documented range");
+            expect(same_register_writes(c.multisynth_writes,
+                plan.tone_sets.front().pll_retune_candidate.multisynth_writes),
+                "complete tone set must share packed MultiSynth including R");
+            expect(std::fabs(tone.actual_hz - tone.requested_hz) < .0001,
+                "integer output planning retains frequency precision");
+        }
+    }
+    for (const auto& tones : std::vector<std::vector<Si5351Planner::ToneEntry>>{
+            {{7040100}, {144490500}}, {{0}}, {{-1}},
+            {{std::numeric_limits<double>::quiet_NaN()}}, {{1e300}}})
+    {
+        const auto plan = Si5351Planner(config).buildPlan(Si5351Planner::Mode::TONE, tones);
+        for (const auto& tone : plan.tone_sets)
+            expect(tone.writes.empty() && tone.actual_hz == 0,
+                "no common divider or invalid input must fail closed");
+    }
+    const auto unsupported = Si5351Planner(config).buildPlan(Si5351Planner::Mode::QRSS, {{7040100}});
+    expect(unsupported.tone_sets[0].writes.empty(), "experiment does not broaden unreviewed modes");
+}
+
 int main()
 {
+    test_integer_multisynth_comparison();
     test_documented_ratio_domain();
     test_special_integer_encoding();
     test_pll_frequency_domain();

@@ -20,7 +20,11 @@ for row,name in enumerate(['carrier-none','transitions-none','keyed-none','keyed
  x=np.fromfile(raw,dtype='<c8');assert len(x)==m['retained_sample_count'];n=np.arange(len(x))
  def channel(offset):
   z=x*np.exp(-2j*np.pi*offset*n/fs)
-  return z[:len(z)//250*250].reshape(-1,250).mean(axis=1)
+  # Isolate each source before decimation; box averaging leaks the strong
+  # reference into this channel and biases phase/envelope observations.
+  hz=abs(np.fft.fftfreq(len(z),1/fs))
+  filt=np.where(hz<=300,1,np.where(hz<450,.5*(1+np.cos(np.pi*(hz-300)/150)),0))
+  return np.fft.ifft(np.fft.fft(z)*filt)[125::250]
  z=channel(freq-center);g=channel(reference-center);t=(np.arange(len(z))+.5)/1000
  power=np.convolve(abs(z)**2,np.ones(5)/5,mode='same');floor=np.median(power[t<.8]);high=np.percentile(power,90);mask=power>max(floor*5,high*.15)
  edges=np.flatnonzero(np.diff(np.r_[False,mask,False]));on=[(float(t[i]),float(t[j-1])) for i,j in zip(edges[::2],edges[1::2]) if j-i>30]
@@ -48,10 +52,16 @@ for row,name in enumerate(['carrier-none','transitions-none','keyed-none','keyed
  if name=='transitions-none':
   start=on[0][0];gaps=[]
   for k in range(1,16):
-   b=start+.5*k;sel=(t>b-.025)&(t<b+.025);gaps.append({'expected_s':b,'minimum_relative_db':float(10*np.log10(max(power[sel].min()/high,1e-15))),'samples_below_minus_10db':int(np.sum(power[sel]<high*.1))})
+   b=start+.5*k;sel=(t>b-.025)&(t<b+.025)
+   left=(t>b-.08)&(t<b-.03);right=(t>b+.03)&(t<b+.08)
+   lf=np.polyfit(t[left]-b,np.unwrap(np.angle(z[left])),1);rf=np.polyfit(t[right]-b,np.unwrap(np.angle(z[right])),1)
+   jump=float(np.angle(np.exp(1j*(rf[1]-lf[1]))))
+   gaps.append({'expected_s':b,'minimum_relative_db':float(10*np.log10(max(power[sel].min()/high,1e-15))),'samples_below_minus_10db':int(np.sum(power[sel]<high*.1)),'phase_step_rad_extrapolated':jump,'frequency_before_hz':float(lf[0]/(2*np.pi)),'frequency_after_hz':float(rf[0]/(2*np.pi))})
   record['transitions']=gaps
  # Carrier burst means are GPSDO-corrected and exclude edge windows.
  if name=='carrier-none':record['burst_means_hz']=[float(tracks[(tracks[:,0]>lo+.2)&(tracks[:,0]<hi-.2),3].mean()) for lo,hi in on if hi-lo>1]
+ np.savetxt(d/'envelope.csv',np.column_stack((t,power/high)),delimiter=',',header='seconds,relative_power',comments='')
+ np.savetxt(d/'spectrum.csv',np.column_stack((rr,pp)),delimiter=',',header='offset_hz,relative_db',comments='')
  results['cases'][name]=record
  axes[row,0].plot(t,10*np.log10(np.maximum(power/high,1e-12)),lw=.8);axes[row,0].set(title=name,ylabel='Relative channel power (dB)',ylim=(-45,3));axes[row,1].plot(rr,pp,lw=.7);axes[row,1].set(title='Spectrum during active intervals',xlabel='Offset from requested carrier (Hz)',ylabel='dB relative to carrier bin',ylim=(-90,5))
 for ax in axes.flat:ax.grid(alpha=.25)
