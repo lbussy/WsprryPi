@@ -141,7 +141,8 @@ features, clock prerequisites and truthful cancellation/output-unknown status.
 
 The [USB CDC transport adapter](wtp-usb-cdc.md) is implemented in Slice 4.
 The [backend](wtp-backend.md) and [early scheduler](wtp-scheduling.md) are
-implemented in Slices 5 and 6. Production status/recovery and operator integration
-remain required. Future UI work still requires a temporary
-UI-level development toggle and Impeccable review. Physical USB behavior,
+implemented in Slices 5 and 6. Slice 7 supplies status/recovery, and the parent
+[production integration](wtp-production-integration.md) now connects selection,
+an owned worker and UI controls with a temporary default-off development toggle.
+Physical USB behavior,
 device timing, RF output and release readiness remain unqualified by these tests.

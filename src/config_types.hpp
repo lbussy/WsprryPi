@@ -34,6 +34,7 @@
 #ifndef CONFIG_TYPES_HPP
 #define CONFIG_TYPES_HPP
 
+#include "wtp_settings.hpp"
 #include "band_gpio.hpp"
 #include "band_lookup.hpp"
 #include "wspr_ref_plan.hpp"
@@ -121,7 +122,8 @@ enum class TransmitBackendKind
     GPIO = 0,
     RP1_GPCLK,
     SI5351,
-    SIMULATED
+    SIMULATED,
+    WTP
 };
 
 inline constexpr bool transmit_backend_uses_gpio_output(
@@ -151,6 +153,8 @@ inline constexpr const char *transmit_backend_kind_to_string(
         return "si5351";
     case TransmitBackendKind::SIMULATED:
         return "simulated";
+    case TransmitBackendKind::WTP:
+        return "wtp";
     }
 
     return "gpio";
@@ -275,6 +279,7 @@ struct ArgParserConfig
     bool use_offset; ///< Enable WSPR random frequency offset.
     int power_level; ///< Active backend RF power level.
     TransmitBackendKind transmit_backend; ///< RF hardware backend.
+    WtpSettings wtp;
     int gpio_tx_pin; ///< GPIO backend transmit pin.
     int gpio_power_level; ///< GPIO backend power level (0-7).
     int rp1_gpio_drive_ma; ///< RP1 GPIO pad drive selection in mA.
@@ -453,6 +458,7 @@ struct ArgParserConfig
         use_offset = other.use_offset;
         power_level = other.power_level;
         transmit_backend = other.transmit_backend;
+        wtp = other.wtp;
         gpio_tx_pin = other.gpio_tx_pin;
         gpio_power_level = other.gpio_power_level;
         rp1_gpio_drive_ma = other.rp1_gpio_drive_ma;

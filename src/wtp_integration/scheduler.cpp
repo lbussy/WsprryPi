@@ -383,6 +383,14 @@ void WtpScheduler::invalidate_pending() noexcept {
   auto expected = WtpSchedulePhase::Waiting;
   phase_.compare_exchange_strong(expected, WtpSchedulePhase::Invalidated);
 }
+StartupQuiesceResult WtpScheduler::inspect_idle() {
+  if (phase() != WtpSchedulePhase::Idle)
+    return {false, "WTP work is pending or unresolved"};
+  auto result = backend_.quiesceForStartup();
+  error_ = result.error;
+  publish();
+  return result;
+}
 CleanupResult WtpScheduler::recover() {
   if (phase() != WtpSchedulePhase::Blocked)
     return {false, "WTP scheduler is not blocked"};

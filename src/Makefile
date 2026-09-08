@@ -306,7 +306,8 @@ THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE := ./WSPR-Transmitter/src/thread_affinit
 COMPONENT_CPP_SOURCES := $(filter-out $(PPM_MANAGER_TEST_SOURCE) $(SIGNAL_HANDLER_TEST_SOURCE) $(SINGLETON_TEST_SOURCE) $(SI5351_TEST_SOURCE) $(SI5351_PLANNER_TEST_SOURCE) $(SI5351_TRANSITION_TEST_SOURCE) $(STARTUP_QUIESCE_TEST_SOURCE) $(LEGACY_GPIO_CLOCK_MODEL_TEST_SOURCE) $(GPIO_FREQUENCY_CORRECTION_TEST_SOURCE) $(SI5351_QUALIFICATION_SOURCE) $(SI5351_QUALIFICATION_MAIN_SOURCE) $(SI5351_QUALIFICATION_TEST_SOURCE) $(RP1_GPCLK_PLANNER_TEST_SOURCE) $(RP1_GPCLK_LIFECYCLE_TEST_SOURCE) $(RP1_GPCLK_TRANSITION_TEST_SOURCE) $(RP1_GPCLK_BACKEND_TEST_SOURCE) $(RP1_GPCLK_LINUX_PROVIDER_TEST_SOURCE) $(RP1_GPCLK_DEVELOPMENT_POLICY_TEST_SOURCE) $(RP1_GPCLK_TRANSMIT_BACKEND_TEST_SOURCE) $(RP1_GPCLK_ADMIN_PROBE_SOURCE) $(SIMULATED_BACKEND_TEST_SOURCE) $(SIMULATED_BACKEND_REALTIME_TEST_SOURCE) $(TRANSMISSION_CONTROLLER_CONTRACT_TEST_SOURCE) $(THREAD_AFFINITY_UNAVAILABLE_TEST_SOURCE),$(COMPONENT_CPP_SOURCES))
 COMPONENT_CPP_SOURCES := $(filter-out $(TRANSMITTER_SHARED_CPP_SOURCES) $(TRANSMITTER_BACKEND_CPP_SOURCES),$(COMPONENT_CPP_SOURCES))
 
-CPP_SOURCES := $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES) $(TRANSMITTER_SHARED_CPP_SOURCES) $(SELECTED_BACKEND_CPP_SOURCES)
+WTP_APPLICATION_SOURCES := $(wildcard wtp_integration/*.cpp) $(wildcard WTP-Client/src/*.cpp) WTP-Client/src/detail/json.cpp
+CPP_SOURCES := $(WTP_APPLICATION_SOURCES) $(LOCAL_CPP_SOURCES) $(COMPONENT_CPP_SOURCES) $(TRANSMITTER_SHARED_CPP_SOURCES) $(SELECTED_BACKEND_CPP_SOURCES)
 REL_CPP_SOURCES := $(patsubst ../../%,%,$(CPP_SOURCES))
 
 CPP_OBJECTS       := $(patsubst %.cpp, $(OBJ_DIR_RELEASE)/%.o,$(REL_CPP_SOURCES))
@@ -632,6 +633,7 @@ CXXFLAGS := -Wno-psabi -std=c++$(CXXVER) \
            -DLIB_JOURNALD=$(HAVE_JOURNALD)
 
 # Include paths
+CXXFLAGS += -I$(abspath ./WTP-Client/include) -I$(abspath ./WTP-Client/src)
 CXXFLAGS += -I$(abspath .)
 CXXFLAGS += -I$(abspath $(BUILD_METADATA_DIR))
 CXXFLAGS += $(foreach dir,$(COMPONENT_SRCDIRS),-I$(abspath $(dir)))
@@ -1748,6 +1750,8 @@ help:
 	$(Q)echo "  wtp-plan-test           Run hardware-free WTP execution-plan conversion tests"
 	$(Q)echo "  wtp-scheduler-test      Run hardware-free early WTP scheduling tests"
 	$(Q)echo "  wtp-status-test         Run WTP status and explicit recovery tests"
+	$(Q)echo "  wtp-application-test    Run hardware-free WTP owned-worker tests"
+	$(Q)echo "  wtp-production-test     Run injected parent configuration/runtime and UI tests"
 	$(Q)echo "  wtp-backend-test        Run hardware-free complete-plan WTP backend tests"
 	$(Q)echo "  wtp-usb-test            Run WTP USB adapter tests using fakes and PTYs only"
 	$(Q)echo "  gdb                     Debug with gdb"
@@ -1839,3 +1843,24 @@ wtp-status-test:
 		WSPR-Transmitter/src/execution_plan_compiler.cpp WSPR-Transmitter/src/transmission_controller.cpp \
 		"$(WTP_STATUS_BUILD_DIR)/client/libwtp_client.a" $(WTP_STATUS_LDFLAGS) -o "$(WTP_STATUS_BUILD_DIR)/wtp_status_test"
 	$(Q)"$(WTP_STATUS_BUILD_DIR)/wtp_status_test"
+
+WTP_APPLICATION_BUILD_DIR ?= build/wtp-application
+WTP_APPLICATION_CXXFLAGS ?= -O2 -g
+WTP_APPLICATION_LDFLAGS ?=
+.PHONY: wtp-application-test
+wtp-application-test:
+	$(Q)$(MAKE) --no-print-directory -C WTP-Client all BUILD_DIR="$(abspath $(WTP_APPLICATION_BUILD_DIR)/client)" CXXFLAGS="$(WTP_APPLICATION_CXXFLAGS)"
+	$(Q)mkdir -p "$(WTP_APPLICATION_BUILD_DIR)"
+	$(Q)$(CXX) -std=c++20 -pthread -Wall -Wextra -Wpedantic -Werror $(WTP_APPLICATION_CXXFLAGS) -I. -IWTP-Client/include \
+		tests/wtp_application_test.cpp wtp_integration/application.cpp wtp_integration/status.cpp wtp_integration/scheduler.cpp wtp_integration/backend.cpp wtp_integration/execution_plan.cpp \
+		WSPR-Transmitter/src/execution_plan_compiler.cpp WSPR-Transmitter/src/transmission_controller.cpp \
+		"$(WTP_APPLICATION_BUILD_DIR)/client/libwtp_client.a" $(WTP_APPLICATION_LDFLAGS) -o "$(WTP_APPLICATION_BUILD_DIR)/wtp_application_test"
+	$(Q)"$(WTP_APPLICATION_BUILD_DIR)/wtp_application_test"
+
+.PHONY: wtp-production-test
+$(BIN_DIR)/wtp_production_test: tests/wtp_production_test.cpp $(SEMANTICS_TEST_DEPS)
+	$(Q)mkdir -p $(BIN_DIR)
+	$(Q)$(CXX) $(CXX_DEBUG_FLAGS) -Itests $^ -o $@ $(LDFLAGS)
+wtp-production-test: $(BIN_DIR)/wtp_production_test
+	$(Q)WSPRRYPI_DISABLE_HARDWARE_ACCESS=1 ./$(BIN_DIR)/wtp_production_test
+	$(Q)node ../WsprryPi-UI/tests/wtp_ui_test.js

@@ -6,10 +6,11 @@ shared `TransmissionRequest::slot`, compiler and transmission controller to the
 [WTP backend](wtp-backend.md). This dedicated path dispatches preparation early;
 it does not use the legacy transmitter's wait-until-start execution path.
 
-The existing production configuration, legacy scheduler, GPIO callbacks and
-backend factory are unchanged. Production selection and configuration/websocket/UI
-integration remain later work. The scheduler is an explicit typed developer API,
-built and tested by focused parent targets, with no CLI/INI/environment controls.
+The scheduler remains a typed parent API. The subsequent
+[production integration](wtp-production-integration.md) owns it in a worker and
+connects persisted configuration, early scheduling, completion dispatch and UI
+status/recovery. Its timing and fault-injection seams remain typed test APIs;
+the production settings do not expose them.
 
 ## Caller lifecycle
 

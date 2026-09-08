@@ -132,7 +132,8 @@ not reinterpret that value as permission for a shorter lease.
 
 Slice 6 implements the parent [early scheduler and UTC handoff](../../docs/wtp-scheduling.md).
 Slice 7 adds parent [runtime status and recovery reporting](../../docs/wtp-status-recovery.md).
-Production configuration, selection and operator/UI wiring remain.
+The parent [production integration](../../docs/wtp-production-integration.md)
+now supplies configuration, selection, an owned worker and operator/UI wiring.
 The USB CDC adapter is implemented but still needs physical target validation.
 No new job
 may be inferred safe from a disconnect, lost acknowledgment, boot change,
@@ -145,11 +146,10 @@ only observes that state. Host UTC validity and RF calibration do not establish
 device UTC validity. USB Console time provisioning remains a separate proposed
 adapter requiring its own scope; this component never opens the Console.
 
-Future Phase 10 UI work must include a UI-level development feature toggle
-that lets the maintainer enable and disable the new UI during development.
-The toggle is temporary development control, not a production operator feature
-or a substitute for backend admission checks. Its exact workflow and validation
-belong to the UI slice, including the mandatory Impeccable review.
+The parent UI includes a default-off, browser-local development visibility
+toggle. It preserves saved backend selection and never enables transmission or
+clears a fault. It is temporary development control, separate from backend
+admission checks; this portable component owns no UI or persistent settings.
 
 ## Documentation impact
 

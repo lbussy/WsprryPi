@@ -106,14 +106,15 @@ function isTransientNetworkFailure(xhr, textStatus = "") {
 }
 
 function selectedRuntimeTransmitBackend() {
-    return currentRuntimeTransmitBackend === "si5351" ? "si5351" : "gpio";
+    return ["si5351", "wtp"].includes(currentRuntimeTransmitBackend) ? currentRuntimeTransmitBackend : "gpio";
 }
 
 function setSelectedRuntimeTransmitBackend(backend) {
-    currentRuntimeTransmitBackend = backend === "si5351" ? "si5351" : "gpio";
+    currentRuntimeTransmitBackend = ["si5351", "wtp"].includes(backend) ? backend : "gpio";
 }
 
 function hasAnySupportedTransmitBackend() {
+    if (selectedRuntimeTransmitBackend() === "wtp") return true;
     const platform = window.WSPRRYPI_PLATFORM || {};
     return (
         platform.gpioClockTransmissionSupported !== false ||

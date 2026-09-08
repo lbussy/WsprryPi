@@ -101,7 +101,7 @@ void print_usage(const std::string &message, int exit_code)
               << "Backend Selection:\n"
               << "  Compiled backends: " << get_compiled_backends() << "\n"
               << "  Ancillary GPIO: " << (has_ancillary_gpio() ? "enabled" : "disabled") << "\n"
-              << "  --backend <gpio|rp1-gpclk|si5351|simulated>\n"
+              << "  --backend <gpio|rp1-gpclk|si5351|simulated|wtp>\n"
               << "                                     Select the backend. Default: gpio.\n"
               << "                                     simulated is transient, non-RF, and never persisted.\n"
               << "                                     rp1-gpclk is an explicit Experimental Pi 5 backend and never a gpio fallback.\n"

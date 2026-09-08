@@ -48,8 +48,10 @@ layers through the shared transmitter controller, with hardware-free tests.
 The [early scheduler](docs/wtp-scheduling.md) freezes complete requests and hands
 off their exact UTC starts before the RF boundary. Its [status and recovery
 boundary](docs/wtp-status-recovery.md) publishes coherent observations and retains
-explicit recovery results. Production configuration, selection and operator/UI
-wiring remain planned.
+explicit recovery results. [Production integration](docs/wtp-production-integration.md)
+adds persisted endpoint selection, an owned runtime worker and explicit status/
+recovery controls behind a default-off UI development toggle. Physical USB,
+target operation and RF qualification remain outstanding.
 
 For containerized ARMv6 and AArch64 builds targeting Raspberry Pi OS Bookworm
 and Trixie, including 32-bit Pi 1/A+ and Pi Zero support, see the

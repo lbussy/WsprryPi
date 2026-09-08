@@ -7,13 +7,11 @@ from another thread while `run()` blocks. `wtp_runtime_status_json()` serializes
 that copy using the existing parent JSON library. Neither reads the transport,
 invokes callbacks, changes ownership nor performs recovery.
 
-This is the status/recovery boundary of the explicitly constructed development
-runtime. The production factory, CLI/INI selection, legacy runtime bridge,
-websocket messages and UI remain unchanged. They must be integrated with explicit
-endpoint and clock configuration in the next slice. The legacy `starting` message
-maps to transmitting and its callbacks can assert local GPIO; it must not be used
-for WTP ARM handoff. No UI work or feature-toggle implementation occurs here.
-The future UI must retain the requested temporary development toggle.
+The subsequent [production integration](wtp-production-integration.md) connects
+this boundary to an owned runtime, CLI/INI selection, HTTP status and explicit
+recovery. The UI includes a default-off development visibility toggle. WTP ARM
+handoff never emits the legacy `starting` callback, which can assert local GPIO.
+The typed scheduler contract below remains applicable beneath that integration.
 
 ## Reading observations
 

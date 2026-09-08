@@ -26,6 +26,8 @@
  * SOFTWARE.
  */
 
+#include "wtp_settings_json.hpp"
+#include "wtp_runtime_bridge.hpp"
 #include "config_handler.hpp"
 #include "i2c_bus_inventory.hpp"
 #include "config_handler_deserialization.hpp"
@@ -74,6 +76,8 @@ bool transmit_backend_is_compiled(TransmitBackendKind backend) noexcept
         return WSPRRYPI_BACKEND_SI5351;
     case TransmitBackendKind::SIMULATED:
         return WSPRRYPI_BACKEND_SIMULATED;
+    case TransmitBackendKind::WTP:
+        return true;
     }
     return false;
 }
@@ -83,6 +87,7 @@ bool transmit_backend_requires_root(TransmitBackendKind backend) noexcept
     switch (backend)
     {
     case TransmitBackendKind::SIMULATED:
+    case TransmitBackendKind::WTP:
         return false;
     case TransmitBackendKind::SI5351:
         return build_has_physical_gpio_capability();
@@ -539,6 +544,7 @@ void init_default_config()
     // Runtime
     config.transmit = false;
     config.transmit_backend = TransmitBackendKind::GPIO;
+    config.wtp = WtpSettings{};
     config.enable_on_boot = EnableOnBootBehavior::Never;
 
     // WSPR
@@ -628,6 +634,13 @@ TestTonePlanningConfigSnapshot current_test_tone_planning_config_snapshot()
 
 void resolve_backend_specific_config(ArgParserConfig &config) noexcept
 {
+    if (config.transmit_backend == TransmitBackendKind::WTP) {
+        config.tx_pin = 0;
+        config.power_level = 0;
+        config.ppm = 0;
+        config.use_system_clock_frequency_estimate = false;
+        return;
+    }
     config.tx_pin = config.gpio_tx_pin;
     if (config.transmit_backend == TransmitBackendKind::SI5351)
     {
@@ -1056,6 +1069,7 @@ namespace
             {"Socket Port", 31416},
             {"Use Shutdown", false},
             {"Shutdown Button", 19}};
+        target["WTP"] = wtp_settings_json(WtpSettings{});
         target["Experimental"] = {
             {"Allow Unqualified Frequency", false},
             {"Allow Non-Amateur Frequency", false}};
@@ -1135,6 +1149,7 @@ namespace
         target.use_offset = source.use_offset;
         target.power_level = source.power_level;
         target.transmit_backend = source.transmit_backend;
+        target.wtp = source.wtp;
         target.gpio_tx_pin = source.gpio_tx_pin;
         target.gpio_power_level = source.gpio_power_level;
         target.rp1_gpio_drive_ma = source.rp1_gpio_drive_ma;
@@ -1313,6 +1328,7 @@ namespace
                 section != "Si5351" &&
                 section != "WSPR" &&
                 section != "CW" &&
+                section != "WTP" &&
                 section != "Experimental")
             {
                 continue;
@@ -1343,7 +1359,10 @@ namespace
                     continue;
                 }
 
-                patch[section][key] = parse_ini_value(trimmed);
+                if (section == "WTP" && (key == "Endpoint" || key == "USB Serial" || key == "Device ID"))
+                    patch[section][key] = trimmed;
+                else
+                    patch[section][key] = parse_ini_value(trimmed);
             }
         }
 
@@ -1517,6 +1536,7 @@ build_persistent_ini_data(const nlohmann::json &source)
             section_name != "WSPR" &&
             section_name != "CW" &&
             section_name != "Experimental" &&
+            section_name != "WTP" &&
             section_name != "Band GPIO")
         {
             continue;
@@ -1552,6 +1572,7 @@ build_persistent_ini_data(const nlohmann::json &source)
         {
             const std::string &key = kv.key();
             const bool persist_key =
+                (section_name == "WTP" && wtp_settings_json(WtpSettings{}).contains(key)) ||
                 (section_name == "Meta" &&
                  key == "debug_logging") ||
                 (section_name == "Operation" &&
@@ -1946,6 +1967,12 @@ void patch_all_from_web(const nlohmann::json &j)
             throw ConfigValidationError(error_message, error_details);
         }
 
+        const auto wtp_selection_error = wtp_runtime_selection_error(
+            candidate_config.transmit_backend == TransmitBackendKind::WTP
+                ? std::optional<WtpSettings>(candidate_config.wtp) : std::nullopt);
+        if (!wtp_selection_error.empty()) throw std::runtime_error(wtp_selection_error);
+        if (wtp_runtime_selected() && wtp_runtime_defers_reload() && candidate_config.mode != config.mode)
+            throw std::runtime_error("Stop Pico work before changing modes");
         config_handler_serialization::serialize_runtime_config_to_json(
             candidate_config, candidate_json);
     }

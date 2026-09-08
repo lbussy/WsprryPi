@@ -60,6 +60,7 @@
 #include "execution_plan_compiler.hpp"
 #include "wspr_reference_adapter.hpp"
 #include "transmitter_runtime_bridge.hpp"
+#include "wtp_runtime_bridge.hpp"
 #include "version.hpp"
 #include "non_wspr_request_builder.hpp"
 
@@ -1360,7 +1361,8 @@ void commit_execution_request(
 
     if (current_transmission_request.isTone() &&
         (config.transmit_backend == TransmitBackendKind::SI5351 ||
-         config.transmit_backend == TransmitBackendKind::RP1_GPCLK))
+         config.transmit_backend == TransmitBackendKind::RP1_GPCLK ||
+         config.transmit_backend == TransmitBackendKind::WTP))
     {
         wsprrypi::TransmissionRequest controller_request =
             build_controller_request_from_legacy(
@@ -1455,7 +1457,7 @@ static wsprrypi::HardwareProfile to_controller_profile(
 {
     if (backend == TransmitBackendKind::SI5351)
         return wsprrypi::HardwareProfile::SI5351;
-    if (backend == TransmitBackendKind::SIMULATED)
+    if (backend == TransmitBackendKind::SIMULATED || backend == TransmitBackendKind::WTP)
         return wsprrypi::HardwareProfile::UNSPECIFIED;
     if (backend == TransmitBackendKind::RP1_GPCLK)
         return wsprrypi::HardwareProfile::RP1_GPCLK;
@@ -1782,6 +1784,7 @@ static wsprrypi::StartupQuiesceResult invoke_startup_quiesce()
 bool run_startup_quiesce_gate(const ArgParserConfig &cfg)
 {
     const wsprrypi::StartupQuiesceResult result = invoke_startup_quiesce();
+    if (cfg.transmit_backend == TransmitBackendKind::WTP) return result.ok;
     if (!result.ok)
     {
         std::lock_guard<std::mutex> lock(startup_quiesce_error_mtx);
@@ -1823,6 +1826,7 @@ bool runtime_transmit_requested(const ArgParserConfig &cfg) noexcept
 bool runtime_transmit_enabled(const ArgParserConfig &cfg) noexcept
 {
     return runtime_transmit_requested(cfg) &&
+           (cfg.transmit_backend != TransmitBackendKind::WTP || wtp_runtime_ready()) &&
            !managed_reload_tx_inhibited &&
            !startup_quiesce_inhibited.load(std::memory_order_acquire) &&
            !rp1_route_transaction_inhibited.load(std::memory_order_acquire);
@@ -1882,6 +1886,8 @@ bool websocket_server_start_enabled(const ArgParserConfig &cfg) noexcept
 static wsprrypi::BackendKind to_controller_backend(
     TransmitBackendKind backend) noexcept
 {
+    if (backend == TransmitBackendKind::WTP)
+        return wsprrypi::BackendKind::WTP;
     if (backend == TransmitBackendKind::SI5351)
         return wsprrypi::BackendKind::SI5351;
     if (backend == TransmitBackendKind::SIMULATED)
@@ -1894,6 +1900,8 @@ static wsprrypi::BackendKind to_controller_backend(
 static wsprrypi::ClockSource to_controller_clock_source(
     const ArgParserConfig &cfg) noexcept
 {
+    if (cfg.transmit_backend == TransmitBackendKind::WTP)
+        return wsprrypi::ClockSource::UNSPECIFIED;
     if (cfg.transmit_backend != TransmitBackendKind::SI5351)
     {
         return wsprrypi::ClockSource::GPIO_CLK;
@@ -1930,6 +1938,7 @@ void set_managed_reload_tx_inhibited(
 
 bool transmitter_reload_should_defer() noexcept
 {
+    if (wtp_runtime_selected()) return wtp_runtime_defers_reload();
     const WsprTransmitState state = transmitter_state();
 
     if (state == WsprTransmitState::TRANSMITTING ||
@@ -2595,7 +2604,8 @@ static bool prepare_and_commit_non_wspr_request(
     return true;
 }
 
-bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
+bool start_non_wspr_transmission_now(const ArgParserConfig &cfg,
+    std::optional<std::chrono::system_clock::time_point> scheduled_start)
 {
     const double committed_ppm = cfg.ppm;
     std::string policy_error;
@@ -2607,8 +2617,9 @@ bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
 
     if (cfg.mode == ModeType::QRSS)
     {
-        const auto controller_request =
+        auto controller_request =
             scheduling_detail::make_qrss_controller_request(cfg, committed_ppm);
+        if (scheduled_start) controller_request.slot.start_time = *scheduled_start;
         auto legacy_request = scheduling_detail::make_qrss_legacy_request(cfg, committed_ppm);
         std::string development_error;
         if (!apply_direct_rp1_development_confirmation(
@@ -2673,8 +2684,9 @@ bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
 
     if (cfg.mode == ModeType::FSKCW)
     {
-        const auto controller_request =
+        auto controller_request =
             scheduling_detail::make_fskcw_controller_request(cfg, committed_ppm);
+        if (scheduled_start) controller_request.slot.start_time = *scheduled_start;
         auto legacy_request = scheduling_detail::make_fskcw_legacy_request(cfg, committed_ppm);
         std::string development_error;
         if (!apply_direct_rp1_development_confirmation(
@@ -2753,8 +2765,9 @@ bool start_non_wspr_transmission_now(const ArgParserConfig &cfg)
 
     if (cfg.mode == ModeType::DFCW)
     {
-        const auto controller_request =
+        auto controller_request =
             scheduling_detail::make_dfcw_controller_request(cfg, committed_ppm);
+        if (scheduled_start) controller_request.slot.start_time = *scheduled_start;
         auto legacy_request = scheduling_detail::make_dfcw_legacy_request(cfg, committed_ppm);
         std::string development_error;
         if (!apply_direct_rp1_development_confirmation(
@@ -2858,7 +2871,17 @@ void schedule_next_non_wspr_launch(const ArgParserConfig &cfg)
         return;
     }
 
-    const auto next_launch = next_non_wspr_schedule_time(cfg);
+    auto next_launch = next_non_wspr_schedule_time(cfg);
+    if (cfg.transmit_backend == TransmitBackendKind::WTP) {
+        if (cfg.schedule_repeat_minutes <= 0) throw std::runtime_error("Pico repeat interval must be positive");
+        const auto earliest = std::chrono::system_clock::now() + wtp_runtime_preparation_lead();
+        while (next_launch < earliest)
+            next_launch += std::chrono::minutes(cfg.schedule_repeat_minutes);
+        non_wspr_schedule_generation.fetch_add(1, std::memory_order_acq_rel);
+        if (!start_non_wspr_transmission_now(cfg, next_launch))
+            request_wspr_shutdown("Pico scheduled request preparation failed");
+        return;
+    }
     const std::uint64_t generation =
         non_wspr_schedule_generation.fetch_add(1, std::memory_order_acq_rel) + 1U;
 

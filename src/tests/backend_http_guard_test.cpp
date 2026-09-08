@@ -25,6 +25,10 @@ int main() {
             method, path, peer, host, origin, snapshot);
     };
 
+    assert(evaluate("POST", "/api/wtp/recover", "192.168.50.42", "wsprrypi", "http://wsprrypi") == BackendHttpGuardDecision::allowed);
+    assert(evaluate("POST", "/api/wtp/recover", "192.168.51.42", "wsprrypi") == BackendHttpGuardDecision::rejected);
+    assert(evaluate("POST", "/api/wtp/recover", "192.168.50.42", "wsprrypi", "http://evil") == BackendHttpGuardDecision::rejected);
+    assert(evaluate("PUT", "/api/wtp", "127.0.0.1", "wsprrypi") == BackendHttpGuardDecision::rejected);
     assert(evaluate("PUT", "/config", "127.0.0.1", "wsprrypi") ==
            BackendHttpGuardDecision::allowed);
     assert(evaluate("PATCH", "/config", "192.168.50.42", "wsprrypi:31415",

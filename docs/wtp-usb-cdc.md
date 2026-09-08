@@ -2,9 +2,9 @@
 
 Phase 10 Slice 4 adds the parent application's
 [`UsbCdcStream`](../src/wtp_integration/usb_cdc.hpp). It implements the portable
-WTP-Client `ByteStream` interface using POSIX serial I/O. It remains outside
-production source discovery: there is no WTP backend selection, command-line
-option, persisted endpoint, scheduler integration or UI in this slice.
+WTP-Client `ByteStream` interface using POSIX serial I/O. The subsequent
+[production integration](wtp-production-integration.md) links this adapter into
+the application with explicit persisted endpoint selection and an owned worker.
 The reusable WTP-Client library remains OS-independent.
 
 ## Endpoint selection and platform support

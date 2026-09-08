@@ -44,5 +44,6 @@ void transmitter_start_async();
 void transmitter_stop_and_join();
 void transmitter_shutdown_for_process_exit();
 void transmitter_clear_soft_off() noexcept;
+void transmitter_poll_events();
 
 #endif // TRANSMITTER_RUNTIME_BRIDGE_HPP

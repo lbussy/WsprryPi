@@ -29,7 +29,9 @@ jobs:
 
       - name: Run WTP component, plan, USB adapter, backend, scheduler and status tests
         working-directory: src
-        run: make wtp-protocol-test wtp-plan-test wtp-usb-test wtp-backend-test wtp-scheduler-test wtp-status-test SUDO=
+        run: |
+          make wtp-protocol-test wtp-plan-test wtp-usb-test wtp-backend-test wtp-scheduler-test wtp-status-test wtp-application-test SUDO=
+          make wtp-production-test BACKENDS=simulated ANCILLARY_GPIO=0 SUDO=
 
       - name: Check container build export handling
         run: python3 scripts/tests/container_build_test.py
@@ -135,7 +137,7 @@ jobs:
 
       - name: Run WTP component, plan, USB adapter, backend, scheduler and status tests
         working-directory: src
-        run: make wtp-protocol-test wtp-plan-test wtp-usb-test wtp-backend-test wtp-scheduler-test wtp-status-test SUDO=
+        run: make wtp-protocol-test wtp-plan-test wtp-usb-test wtp-backend-test wtp-scheduler-test wtp-status-test wtp-application-test wtp-production-test SUDO=
 
       - name: Run parent semantics and cleanup lifecycle tests
         working-directory: src

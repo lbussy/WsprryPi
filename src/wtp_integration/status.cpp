@@ -64,6 +64,7 @@ Json report(const std::optional<WtpScheduleReport> &r) {
       {"start_utc_ns", std::to_string(r->start_utc_ns)},
       {"dispatch_utc_ns", std::to_string(r->dispatch_utc_ns)},
       {"arm_handed_off", r->arm_handed_off},
+      {"skipped", r->skipped},
       {"reload_deferred", r->reload_deferred},
       {"execution",
        {{"ok", e.ok},

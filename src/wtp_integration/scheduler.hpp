@@ -50,7 +50,7 @@ struct WtpScheduleReport {
   RequestId request_id{};
   std::string job_id, error;
   std::uint64_t start_utc_ns{}, dispatch_utc_ns{};
-  bool arm_handed_off{}, reload_deferred{};
+  bool arm_handed_off{}, reload_deferred{}, skipped{};
   ExecutionResult execution{};
   std::optional<wtp::HelloResponse> identity{};
   std::optional<wtp::JobEvidence> job{};
@@ -106,6 +106,7 @@ public:
   void invalidate_pending() noexcept;
   // Explicit reconciliation after same-session reconnect.
   CleanupResult recover();
+  StartupQuiesceResult inspect_idle(); // Read-only, owner thread, Idle only.
   WtpRuntimeStatus status() const; // Coherent copy, no transport/clock access.
   WtpSchedulePhase phase() const noexcept { return phase_.load(); }
   const std::string &diagnostic() const noexcept { return error_; }

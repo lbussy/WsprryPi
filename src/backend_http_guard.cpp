@@ -23,7 +23,8 @@ BackendHttpGuardDecision evaluate_backend_http_request(
             path == "/api/network-safety" ||
             path.starts_with("/api/network-safety/") ||
             path == "/api/rp1-gpclk-route" ||
-            path.starts_with("/api/rp1-gpclk-route/");
+            path.starts_with("/api/rp1-gpclk-route/") ||
+            path == "/api/wtp" || path.starts_with("/api/wtp/");
         if (protected_candidate) {
             if (rejection_reason)
                 *rejection_reason = SupportRequestGuardDecision::invalid_request;

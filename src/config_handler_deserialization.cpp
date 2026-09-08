@@ -3,6 +3,7 @@
  * @brief Deserializes the JSON configuration model into runtime configuration.
  */
 
+#include "wtp_settings_json.hpp"
 #include "config_handler_deserialization.hpp"
 #include "config_handler.hpp"
 #include "config_handler_serialization.hpp"
@@ -98,6 +99,7 @@ TransmitBackendKind parse_transmit_backend_kind(
     {
         return TransmitBackendKind::GPIO;
     }
+    if (lowered == "wtp") return TransmitBackendKind::WTP;
     if (lowered == "si5351")
     {
         return TransmitBackendKind::SI5351;
@@ -111,7 +113,7 @@ TransmitBackendKind parse_transmit_backend_kind(
             "Operation.Transmit Backend 'simulated' is transient and cannot be persisted.");
 
     throw std::runtime_error(
-        "Invalid Operation.Transmit Backend. Expected 'gpio', 'rp1-gpclk', or 'si5351'; simulated is CLI-only.");
+        "Invalid Operation.Transmit Backend. Expected 'gpio', 'rp1-gpclk', 'si5351', or 'wtp'; simulated is CLI-only.");
 }
 
 EnableOnBootBehavior parse_enable_on_boot_behavior(
@@ -545,6 +547,8 @@ void deserialize_json_to_runtime_config(const nlohmann::json &source, ArgParserC
         parse_enable_on_boot_behavior(source.at("Operation"));
     target.transmit_backend =
         parse_transmit_backend_kind(source.at("Operation"));
+    target.wtp = parse_wtp_settings(source.value("WTP", nlohmann::json::object()),
+                                    target.transmit_backend == TransmitBackendKind::WTP);
     const nlohmann::json gpio =
         source.contains("GPIO") ? source.at("GPIO") : nlohmann::json::object();
     target.gpio_tx_pin =
@@ -795,6 +799,8 @@ void deserialize_json_to_runtime_config(const nlohmann::json &source, ArgParserC
         source.at("Operation").contains("Use Amp")
             ? source.at("Operation").value("Use Amp", false)
             : target.amp_pin >= 0;
+    if (target.transmit_backend == TransmitBackendKind::WTP && target.use_amp)
+        throw std::runtime_error("Pico WTP requires amplifier GPIO control disabled.");
     if (target.amp_pin < 0)
     {
         target.use_amp = false;

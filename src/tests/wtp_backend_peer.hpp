@@ -3,6 +3,7 @@
 #include "wtp/session.hpp"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <deque>
 #include <functional>
 #include <iostream>
@@ -14,7 +15,7 @@
 #pragma once
 namespace backend_test {
 using namespace wsprrypi::wtp;
-static unsigned checks;
+static std::atomic<unsigned> checks{};
 #define CHECK(x)                                                               \
   do {                                                                         \
     ++checks;                                                                  \

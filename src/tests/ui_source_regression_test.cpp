@@ -246,7 +246,7 @@ int main()
             ui_source.find("completeGuardedActiveModeChange();") != std::string::npos &&
             ui_source.find("guardedActiveModeChange: true,") != std::string::npos &&
             ui_source.find("suspendConfigAutosave(true);") != std::string::npos &&
-            ui_source.find("input:not(#transmit, [name=\"mode_toggle\"], [name=\"qrss_type\"])") != std::string::npos &&
+            ui_source.find("input:not(#transmit, #wtp_visible, [name=\"mode_toggle\"], [name=\"qrss_type\"])") != std::string::npos &&
             ui_source.find("configAutosaveNeedsRuntimeRefresh = true;") != std::string::npos &&
             ui_source.find("pendingPersistedMode = currentConfigModeSelection;") != std::string::npos &&
             ui_source.find("flushAutosave();") != std::string::npos &&
@@ -404,7 +404,7 @@ int main()
             ui_source.find("return $(\"#si5351-backend-panel\").length > 0;") != std::string::npos &&
             ui_source.find("const si5351Supported = si5351UiSupported();") != std::string::npos &&
             ui_source.find("platform.si5351Detected === false") != std::string::npos &&
-            ui_source.find("$backend.prop(\"disabled\", !anyBackendSupported);") != std::string::npos &&
+            ui_source.find("$backend.prop(\"disabled\", currentBackend === \"wtp\" || !anyBackendSupported);") != std::string::npos &&
             ui_source.find("function setTransmitBackendSelection(backend, triggerChange = false)") != std::string::npos,
         "Si5351 backend selection must remain available through the output-path switch while detection controls availability guidance");
     require(
@@ -1206,7 +1206,7 @@ int main()
             site_source.find("Update check selected targetBranch=") != std::string::npos,
         "update checker must log parsed display branch, raw branch/SHA, branch lookup URL/status/result, selected target branch, fallback state, and target HEAD for debugging");
     require(
-        ui_source.find("const si5351Active = selectedTransmitBackend() === \"si5351\";") != std::string::npos &&
+        ui_source.find("const si5351Active = selectedTransmitBackend() !== \"gpio\";") != std::string::npos &&
             ui_source.find("const estimateEnabled = $(\"#use_system_clock_frequency_estimate\").is(\":checked\");") != std::string::npos &&
             ui_source.find("$residual.prop(\"disabled\", si5351Active || !estimateEnabled);") != std::string::npos &&
             ui_source.find("let use_system_clock_frequency_estimate = parseBool($(\"#use_system_clock_frequency_estimate\").is(\":checked\"));") != std::string::npos &&

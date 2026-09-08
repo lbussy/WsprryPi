@@ -5,9 +5,10 @@ Phase 10 Slice 5 implements `WtpTransmitBackend` in
 `ITransmissionBackend` interface and `TransmissionController`. It composes
 WTP-Client Session with the execution-plan converter. Its explicit stream input
 accepts the [USB CDC adapter](wtp-usb-cdc.md) or an injected test transport.
-The implementation is built by focused parent targets and is not registered in
-the production application factory. `BackendKind::WTP` is deliberately reported
-unavailable by that factory pending production status and selection integration.
+The [production application](wtp-production-integration.md) now owns this backend
+through a dedicated complete-job scheduler and worker. The reusable transmitter
+component's generic factory still reports `BackendKind::WTP` unavailable: its
+symbol-oriented construction cannot supply this parent-owned session lifecycle.
 
 ## Explicit lifecycle
 
@@ -59,7 +60,7 @@ interprets its first entry as a uniform frequency shift. Exact per-event WTP
 nanohertz adjustments are instead retained by `adjustments()`, including after
 cleanup until the next prepared job. They are checked against CAPS ranges and
 host frequency policy before execution is enabled. The requested plan stays
-unchanged. Future operator status must consume this explicit remote evidence.
+unchanged. Parent runtime status consumes this explicit remote evidence.
 
 ## Clock and bounded observation
 
@@ -99,10 +100,10 @@ rearms or aborts a foreign job. Missing job records or changed device/boot ident
 cannot authorize resubmission. Closing USB cannot establish inactive RF output.
 A prior expired lease does not imply that an armed/running job stopped.
 
-There is no automatic reconnect, durable process-restart recovery, production
-status publication, GPIO/amp-control orchestration or scheduler repeat/reload
-integration in this slice. A higher-level controller must block subsequent jobs
-while earlier output or cleanup is unresolved. Advertised capabilities and the
+There is no automatic reconnect or durable process-restart recovery. Parent
+production integration supplies status and repeat/reload orchestration, blocks
+new work while earlier output or cleanup is unresolved, and rejects host GPIO/
+amp control for WTP. Advertised capabilities and the
 external RF output class are not RF qualification. WTP modes/frequencies remain
 untested in host qualification policy and require explicit experimental opt-in;
 non-amateur frequencies require the separate existing opt-in too.
