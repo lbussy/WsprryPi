@@ -14,6 +14,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -128,9 +129,11 @@ namespace
         {
             backendSignalStopRequest();
         }
-        bool backendWaitInterruptableFor(std::chrono::nanoseconds) override
+        bool backendWaitInterruptableFor(std::chrono::nanoseconds duration) override
         {
             ++wait_calls;
+            if (on_wait) on_wait();
+            if (real_waits) std::this_thread::sleep_for(duration);
             if (interrupt_on_wait_call != 0 &&
                 wait_calls == interrupt_on_wait_call)
             {
@@ -154,6 +157,8 @@ namespace
         }
         bool backendRestartCurrentConfiguration() override { return false; }
 
+        bool real_waits = false;
+        std::function<void()> on_wait;
         std::size_t progress_calls = 0;
         std::size_t wait_calls = 0;
         std::size_t interrupt_on_wait_call = 0;
@@ -850,8 +855,59 @@ void test_optimized_backend_and_drive()
     }
 }
 
+void test_envelope_deadlines_and_off_retune_readiness()
+{
+    for (bool cancel : {false, true})
+    {
+        TestBridge bridge; bridge.real_waits = true;
+        auto adapter = std::make_shared<FakeI2CAdapter>();
+        auto cfg = config(adapter); cfg.device.optimize_register_writes = true;
+        WsprSi5351Backend backend(bridge,cfg);
+        auto plan = single_tone_plan(); plan.events[0].rf_on = false;
+        auto key = plan.events[0]; key.rf_on = true;
+        key.offset_from_start = std::chrono::milliseconds(100);
+        key.duration = std::chrono::milliseconds(40);
+        key.envelope.fade_shape = wsprrypi::FadeShape::RAISED_COSINE;
+        key.envelope.fade_in = key.envelope.fade_out = std::chrono::milliseconds(20);
+        key.envelope.fade_slice = std::chrono::milliseconds(1);
+        plan.events.push_back(key); plan.summary.event_count = 2;
+        expect(configure(backend,plan), "deadline envelope configure");
+        std::chrono::steady_clock::time_point first_on{}, last_off{};
+        unsigned enables = 0;
+        adapter->after_write = [&](std::uint8_t r, std::uint8_t v, std::size_t) {
+            if (r != 3) return;
+            if (v == 0xfe) {
+                if (enables++ == 0) first_on = std::chrono::steady_clock::now();
+                if (cancel) bridge.backendSignalStopRequest();
+            } else if (enables != 0) last_off = std::chrono::steady_clock::now();
+            // Deliberately make each output transaction longer than a slice.
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        };
+        const auto result = backend.execute(plan);
+        expect(result.ok && result.stopped == cancel, "envelope completes or cancels cleanly");
+        expect(enables != 0 && adapter->registers[3] == 255, "envelope ends inhibited");
+        expect(last_off-first_on < std::chrono::milliseconds(65),
+            "slow I2C must not accumulate across all fade slices");
+        if (cancel) expect(enables == 1, "cancelled envelope never re-enables");
+    }
+    TestBridge bridge; auto adapter=std::make_shared<FakeI2CAdapter>();
+    auto cfg=config(adapter); cfg.pll_only_updates=true; cfg.device.optimize_register_writes=true;
+    WsprSi5351Backend backend(bridge,cfg); auto plan=four_tone_plan(4);
+    for (auto& event : plan.events) event.rf_on=false;
+    adapter->after_write=[adapter](std::uint8_t r,std::uint8_t,std::size_t n) {
+        if (r == 33 && n == 3) adapter->registers[0]=0x20;
+    };
+    bridge.on_wait=[adapter]() {adapter->registers[0]=0;};
+    expect(configure(backend,plan), "off retune configure");
+    expect(backend.execute(plan).ok && bridge.wait_calls == 1,
+        "RF-off PLL-only retune may wait for lock while inhibited");
+    expect(count_write(*adapter,3,0xfe)==0, "off retune never enables RF");
+    adapter->after_write={}; bridge.on_wait={};
+}
+
 int main()
 {
+    test_envelope_deadlines_and_off_retune_readiness();
     test_burst_and_cache_failure_contract();
     test_optimized_backend_and_drive();
     test_pll_only_and_readiness();

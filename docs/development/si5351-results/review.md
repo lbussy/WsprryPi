@@ -85,3 +85,21 @@ or explicitly inhibited programming, with individual transactions retained while
 RF is active. Added active-transaction assertions and explicit status logging.
 This closes the unsafe combination conservatively; it does not establish atomic
 or uninterrupted active burst tuning.
+
+
+## Step 4: fade timing and measured spectrum
+
+The wide-channel baseline edge view shows full-amplitude chopping, and the
+narrow-threshold 2 m on interval is about 531 ms for a nominal 500 ms key,
+versus about 502 ms without fading. The requested 20 ms fades are stretched by
+I2C and relative waits. Slice deadlines now use the original event schedule;
+expired pulses are skipped and a requested fade-out ends disabled even if its
+last slice was missed. None/linear/raised-cosine semantics remain duty-cycle
+shaping. No analog envelope or external hardware has been introduced.
+
+Adversarial checks use output transactions deliberately slower than a slice and
+cancel after enable. These verify bounded event duration and no subsequent
+re-enable. Review also repaired readiness selection for an RF-off compatible PLL
+retune: it may wait while inhibited, whereas active RF still fails immediately.
+The initial off-retune fixture had only two unique WSPR tones and correctly failed
+configuration; corrected it to the required complete four-tone set.

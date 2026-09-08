@@ -635,7 +635,9 @@ wsprrypi::ExecutionResult WsprSi5351Backend::execute(
                 }
             }
 
-            if (!runEnvelopeEvent(event, rf_enabled, result.error))
+            if (!runEnvelopeEvent(event,
+                    add_ns(start_time, event.offset_from_start.count()),
+                    rf_enabled, result.error))
             {
                 log_si5351(owner_, WsprTransmitLogLevel::ERROR, result.error);
                 idle_device();
@@ -706,6 +708,7 @@ wsprrypi::ExecutionResult WsprSi5351Backend::execute(
 
 bool WsprSi5351Backend::runEnvelopeEvent(
     const wsprrypi::RfEvent& event,
+    const timespec& event_start,
     bool& rf_enabled,
     std::string& error)
 {
@@ -760,6 +763,22 @@ bool WsprSi5351Backend::runEnvelopeEvent(
             ? event.envelope.fade_slice
             : std::chrono::duration_cast<std::chrono::nanoseconds>(
                   std::chrono::milliseconds(5));
+    auto remaining_until = [&](std::chrono::nanoseconds offset) {
+        timespec now{};
+        if (::clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+            throw std::system_error(errno, std::generic_category(), "clock_gettime");
+        return diff_ns(add_ns(event_start, offset.count()), now);
+    };
+    auto wait_until = [&](std::chrono::nanoseconds offset) {
+        while (!stop_requested_ && !owner_.backendShouldStop())
+        {
+            const auto remaining = remaining_until(offset);
+            if (remaining <= 0) return true;
+            if (!owner_.backendWaitInterruptableFor(std::chrono::nanoseconds(remaining)))
+                return false;
+        }
+        return false;
+    };
     std::chrono::nanoseconds elapsed{0};
     while (elapsed < event.duration &&
            !stop_requested_ &&
@@ -767,6 +786,13 @@ bool WsprSi5351Backend::runEnvelopeEvent(
     {
         const auto remaining = event.duration - elapsed;
         const auto slice = std::min(remaining, slice_limit);
+        // Deadlines include time spent on I2C. Skip expired slices rather than
+        // replaying stale pulses or accumulating transfer and scheduler delays.
+        if (remaining_until(elapsed + slice) <= 0)
+        {
+            elapsed += slice;
+            continue;
+        }
         const auto midpoint = elapsed + slice / 2;
         const double level =
             envelope_level_at(event.envelope, event.duration, midpoint);
@@ -775,12 +801,13 @@ bool WsprSi5351Backend::runEnvelopeEvent(
                 static_cast<double>(slice.count()) * level));
         const auto off_duration = slice - on_duration;
 
-        if (on_duration > std::chrono::nanoseconds::zero())
+        if (on_duration > std::chrono::nanoseconds::zero() &&
+            remaining_until(elapsed + on_duration) > 0)
         {
             if (!enable_output())
                 return false;
 
-            if (!owner_.backendWaitInterruptableFor(on_duration))
+            if (!wait_until(elapsed + on_duration))
                 return true;
         }
 
@@ -789,14 +816,16 @@ bool WsprSi5351Backend::runEnvelopeEvent(
             if (!disable_output())
                 return false;
 
-            if (!owner_.backendWaitInterruptableFor(off_duration))
+            if (!wait_until(elapsed + slice))
                 return true;
         }
 
         elapsed += slice;
     }
 
-    return true;
+    // Even if the final fade slice expired during a slow transfer, finish off.
+    return event.envelope.fade_out > std::chrono::nanoseconds::zero()
+        ? disable_output() : true;
 }
 
 void WsprSi5351Backend::stop() noexcept
@@ -1149,7 +1178,7 @@ bool WsprSi5351Backend::applyTone(
             begin = end;
         }
 
-        if (pll_only || (rf_enabled && !inhibited)) {
+        if (rf_enabled && !inhibited) {
             std::uint8_t status = 0;
             if (!device_.readRegister(0,status) || (status & 0xa8) != 0) {
                 std::ostringstream message;

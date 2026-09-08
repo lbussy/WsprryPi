@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <time.h>
 #include <vector>
 
 class IControllerBridge;
@@ -253,6 +254,7 @@ private:
 
     bool runEnvelopeEvent(
         const wsprrypi::RfEvent& event,
+        const timespec& event_start,
         bool& rf_enabled,
         std::string& error);
 
