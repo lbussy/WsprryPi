@@ -10,7 +10,9 @@ ident=json.loads((root/'identity.json').read_text());fs=ident['sample_rate_hz'];
 fig,axes=plt.subplots(4,2,figsize=(14,12))
 for row,name in enumerate(['carrier-none','transitions-none','keyed-none','keyed-raised_cosine']):
  d=root/name;m=json.loads((d/'metadata.json').read_text());raw=d/'capture.cf32';assert hashlib.sha256(raw.read_bytes()).hexdigest()==m['output']['sha256'];assert m['overflow_count']==0 and m['clipping']['sample_count']==0
- assert m['actual_settings']['center_frequency_hz']==center and m['actual_settings']['sample_rate_hz']==fs
+ assert m['actual_settings']=={'format':'CF32','sample_rate_hz':fs,'bandwidth_hz':ident['bandwidth_hz'],'center_frequency_hz':center,'gain_db':ident['gain_db'],'channel':0,'agc':False,'bias_tee':False}
+ assert m['resolved_device']=={'driver':'sdrplay','serial':'2404058C60'}
+ assert m['primary_outcome']=='success' and m['cleanup']['outcome']=='verified'
  ready=json.loads((root/'gpsdo/ready.json').read_text());off=json.loads((root/'gpsdo/disabled.json').read_text())
  start=datetime.datetime.fromisoformat(m['timestamps']['retained_capture_start_utc'].replace('Z','+00:00')).timestamp()
  end=datetime.datetime.fromisoformat(m['timestamps']['retained_capture_complete_utc'].replace('Z','+00:00')).timestamp()

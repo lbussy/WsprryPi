@@ -329,6 +329,15 @@ bool Si5351Device::writeRegister(
         return false;
     }
 
+    // Only stable clock controls may be elided. Reset and output-enable writes
+    // are commands/safety operations and always reach the bus.
+    if (config_.optimize_register_writes && config_.enable_register_cache &&
+        address >= 16 && address <= 18 && cache_valid_[address] &&
+        cache_values_[address] == value)
+    {
+        last_error_.clear();
+        return true;
+    }
     const std::uint8_t buffer[2] = {address, value};
     const ssize_t written = adapter_->writeData(fd_, buffer, sizeof(buffer));
     if (written != static_cast<ssize_t>(sizeof(buffer)))
@@ -395,15 +404,49 @@ bool Si5351Device::readRegister(
     return true;
 }
 
-bool Si5351Device::writeRegisters(
-    const std::vector<RegisterWrite>& writes)
+std::size_t Si5351Device::writeGroupEnd(
+    const std::vector<RegisterWrite>& writes, std::size_t begin)
 {
-    for (const RegisterWrite& write : writes)
-    {
-        if (!writeRegister(write.address, write.value))
-            return false;
-    }
+    if (begin >= writes.size()) return writes.size();
+    const auto address = writes[begin].address;
+    // PLLA/B and MultiSynth0/1/2 each have eight contiguous parameter bytes.
+    if (address < 26 || address > 65) return begin + 1;
+    const unsigned block_end = 26 + ((address - 26) / 8 + 1) * 8;
+    std::size_t end = begin + 1;
+    while (end < writes.size() && writes[end].address == address + end - begin &&
+        writes[end].address < block_end) ++end;
+    return end;
+}
 
+bool Si5351Device::writeRegisters(const std::vector<RegisterWrite>& writes)
+{
+    for (std::size_t begin = 0; begin < writes.size();)
+    {
+        const std::size_t end = config_.optimize_register_writes
+            ? writeGroupEnd(writes, begin) : begin + 1;
+        if (end == begin + 1)
+        {
+            if (!writeRegister(writes[begin].address, writes[begin].value)) return false;
+        }
+        else
+        {
+            std::lock_guard<std::mutex> transaction_lock(g_i2c_transaction_mutex);
+            if (!isOpen()) { setLastError("Cannot write Si5351 block: device closed."); return false; }
+            std::uint8_t buffer[9] = {writes[begin].address};
+            for (std::size_t i = begin; i < end; ++i) buffer[i - begin + 1] = writes[i].value;
+            const std::size_t size = end - begin + 1;
+            const ssize_t written = adapter_->writeData(fd_, buffer, size);
+            if (written != static_cast<ssize_t>(size))
+            {
+                // Some bytes may have reached silicon. Never retry or trust cache.
+                setLastError("Si5351 parameter block write failed or was short.");
+                return false;
+            }
+            for (std::size_t i = begin; i < end; ++i)
+                updateRegisterCache(writes[i].address, writes[i].value);
+        }
+        begin = end;
+    }
     last_error_.clear();
     return true;
 }
@@ -445,5 +488,6 @@ void Si5351Device::updateRegisterCache(
 
 void Si5351Device::setLastError(const std::string& message)
 {
+    clearRegisterCache();
     last_error_ = message;
 }

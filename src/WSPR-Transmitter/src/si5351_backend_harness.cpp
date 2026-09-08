@@ -59,6 +59,7 @@ namespace
         double ppm = 0.0;
         bool pll_only = false;
         bool integer_ms = false;
+        bool burst = false;
         std::string scenario;
         std::string fade = "none";
     };
@@ -98,6 +99,8 @@ namespace
             << "  --i2c-address <addr>\n"
             << "  --dry-run\n"
             << "  --pll-only (experimental compatible PLL transitions)\n"
+            << "  --integer-ms (experimental common integer output divider)\n"
+            << "  --burst (experimental parameter bursts and control cache)\n"
             << "  --ppm <ppm>\n"
             << "  --scenario carrier|transitions|keyed (bounded comparison)\n"
             << "  --fade none|linear|raised_cosine (keyed scenario only)\n";
@@ -207,6 +210,7 @@ namespace
                     throw std::invalid_argument("I2C address out of range.");
                 options.i2c_address = static_cast<std::uint8_t>(address);
             }
+            else if (arg == "--burst") options.burst = true;
             else if (arg == "--integer-ms") options.integer_ms = true;
             else if (arg == "--pll-only") options.pll_only = true;
             else if (arg == "--ppm") options.ppm = parse_double_arg(arg, require_value());
@@ -466,6 +470,7 @@ namespace
         config.dry_run = options.dry_run;
         config.pll_only_updates = options.pll_only;
         config.planner.prefer_integer_multisynth = options.integer_ms;
+        config.device.optimize_register_writes = options.burst;
         return config;
     }
 

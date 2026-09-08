@@ -108,6 +108,8 @@ public:
             ReferenceSource::EXTERNAL_TCXO;
         int crystal_load_capacitance_pf = 10;
         bool enable_register_cache = true;
+        // Maintainer opt-in until broader bus/hardware qualification.
+        bool optimize_register_writes = false;
     };
 
     /**
@@ -234,6 +236,10 @@ public:
      * @return True on success
      */
     bool writeRegisters(const std::vector<RegisterWrite>& writes);
+
+    // Return the next safe transaction boundary; never cross parameter blocks.
+    static std::size_t writeGroupEnd(const std::vector<RegisterWrite>& writes,
+        std::size_t begin);
 
     /**
      * @brief Return the device configuration

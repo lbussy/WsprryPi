@@ -57,26 +57,19 @@ namespace
                 selected_register = bytes[0];
                 return 1;
             }
-            if (size != 2)
+            if (size < 2 || size > 9) { errno = EIO; return -1; }
+            transactions.push_back(std::vector<std::uint8_t>(bytes, bytes + size));
+            for (std::size_t i = 1; i < size; ++i)
             {
-                errno = EIO;
-                return -1;
+                const std::uint8_t address = bytes[0] + i - 1;
+                ++address_attempts[address];
+                if (address == fail_address && address_attempts[address] == fail_address_occurrence)
+                { errno = EIO; return i == 1 ? -1 : static_cast<ssize_t>(i); }
+                registers[address] = bytes[i];
+                writes.push_back({address, bytes[i]});
+                if (after_write) after_write(address, bytes[i], address_attempts[address]);
             }
-
-            const std::uint8_t address = bytes[0];
-            ++address_attempts[address];
-            if (address == fail_address &&
-                address_attempts[address] == fail_address_occurrence)
-            {
-                errno = EIO;
-                return -1;
-            }
-
-            registers[address] = bytes[1];
-            writes.push_back({address, bytes[1]});
-            if (after_write)
-                after_write(address, bytes[1], address_attempts[address]);
-            return 2;
+            return static_cast<ssize_t>(size);
         }
 
         ssize_t readData(int, void* data, std::size_t size) override
@@ -99,6 +92,7 @@ namespace
         std::array<std::uint8_t, 256> registers{};
         std::array<std::size_t, 256> address_attempts{};
         std::vector<std::pair<std::uint8_t, std::uint8_t>> writes;
+        std::vector<std::vector<std::uint8_t>> transactions;
         std::uint8_t selected_register = 0;
         std::uint8_t fail_address = 0xff;
         std::size_t fail_address_occurrence = 0;
@@ -788,8 +782,73 @@ namespace
     }
 }
 
+void test_burst_and_cache_failure_contract()
+{
+    auto adapter = std::make_shared<FakeI2CAdapter>();
+    Si5351Device::Config cfg; cfg.optimize_register_writes = true;
+    Si5351Device device(cfg, adapter); expect(device.open(), "open burst device");
+    std::vector<Si5351Device::RegisterWrite> writes;
+    for (unsigned r = 26; r < 42; ++r) writes.push_back({static_cast<std::uint8_t>(r), 1});
+    expect(device.writeRegisters(writes), "adjacent PLL blocks write");
+    expect(adapter->transactions.size() == 2 && adapter->transactions[0].size() == 9 &&
+        adapter->transactions[1][0] == 34, "burst stops at parameter block boundary");
+    expect(device.writeRegister(16, 0x4c) && device.writeRegister(16, 0x4c), "cached clock control");
+    expect(adapter->address_attempts[16] == 1, "identical stable control elided");
+    device.writeRegister(177, 0x20); device.writeRegister(177, 0x20);
+    device.writeRegister(3, 255); device.writeRegister(3, 255);
+    expect(adapter->address_attempts[177] == 2 && adapter->address_attempts[3] == 2,
+        "reset and output disable never elided");
+    adapter->fail_address = 28; adapter->fail_address_occurrence = 2;
+    expect(!device.writeRegisters(writes), "partial burst fails without retry");
+    expect(adapter->address_attempts[28] == 2, "failed burst not retried");
+    expect(device.writeRegister(16, 0x4c), "control reapplied after partial failure");
+    expect(adapter->address_attempts[16] == 2, "failure invalidates cache");
+    device.close(); expect(device.open(), "reopen burst device");
+    device.writeRegister(16, 0x4c);
+    expect(adapter->address_attempts[16] == 3, "reopen invalidates cache");
+}
+
+void test_optimized_backend_and_drive()
+{
+    for (bool optimized : {false, true}) for (int power = 1; power <= 4; ++power)
+    {
+        TestBridge bridge; auto adapter = std::make_shared<FakeI2CAdapter>();
+        auto cfg = config(adapter); cfg.device.optimize_register_writes = optimized;
+        cfg.pll_only_updates = true;
+        WsprSi5351Backend backend(bridge, cfg); auto plan = four_tone_plan(4);
+        expect(backend.configure(plan, wsprrypi::BackendExecutionInputs{power, 0}).ok,
+            "drive comparison configure");
+        bool active_drive_ok = true;
+        adapter->after_write = [adapter, power, &active_drive_ok](std::uint8_t r, std::uint8_t v, std::size_t) {
+            if (r == 3 && v == 0xfe && (adapter->registers[16] & 3) != power - 1)
+                active_drive_ok = false;
+        };
+        expect(backend.execute(plan).ok && active_drive_ok, "tone programming preserves chosen drive");
+        expect(adapter->registers[3] == 255 && adapter->address_attempts[177] == 2,
+            "optimized backend retains cleanup and first-only reset");
+        if (optimized) expect(adapter->transactions.size() < 30, "parameter batches reduce transaction count");
+        adapter->after_write = {};
+    }
+    for (bool cancel : {false, true})
+    {
+        TestBridge bridge; auto adapter = std::make_shared<FakeI2CAdapter>();
+        auto cfg = config(adapter); cfg.device.optimize_register_writes = true; cfg.pll_only_updates = true;
+        if (cancel) adapter->after_write = [&bridge](std::uint8_t r,std::uint8_t,std::size_t n) {
+            if (r == 28 && n == 3) bridge.backendSignalStopRequest();
+        };
+        else {adapter->fail_address = 28; adapter->fail_address_occurrence = 3;}
+        WsprSi5351Backend backend(bridge,cfg); auto plan=four_tone_plan(4);
+        expect(configure(backend,plan), "optimized failure configure"); auto result=backend.execute(plan);
+        expect(cancel ? result.stopped : !result.ok, "mid-burst cancellation/failure reported");
+        expect(adapter->registers[3] == 255 && count_write(*adapter,3,0xfe) == 1,
+            "mid-burst cancellation/failure disables without re-enable");
+    }
+}
+
 int main()
 {
+    test_burst_and_cache_failure_contract();
+    test_optimized_backend_and_drive();
     test_pll_only_and_readiness();
     test_committed_calibration_snapshot_and_reporting();
     test_invalid_calibration_fails_before_output_enable();

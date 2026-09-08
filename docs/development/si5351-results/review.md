@@ -54,3 +54,22 @@ reprocessed identically. The 5 ms envelope smoother limits gap resolution; phase
 steps are exploratory extrapolations, not calibrated phase-noise measurements.
 Capture cleanup now attempts every device/service restoration independently and
 records errors even if an earlier cleanup fails.
+
+
+## Step 3: bounded parameter bursts and control-cache experiment
+
+Contiguous parameter writes are grouped within one PLL/MultiSynth block only.
+Reset and output-enable operations are always sent. A partial write fails without
+retry and invalidates all cached state; every device error and reopen invalidates
+cache. The opt-in assumes the harness owns the device without another writer.
+The backend observes stop requests between bus transactions, including before
+re-enable; a physical I2C transfer cannot be made atomic by this optimization.
+
+Adversarial repair: initial runtime grouping allocated a vector for each single
+write. Single writes now retain the direct call. Drive bits are merged during
+plan preparation, repairing their previous overwrite while avoiding runtime
+plan copying. Tests verify all four requested drive settings before RF enable,
+block boundaries, short writes, no retry, command writes, cache invalidation,
+mid-burst stop/failure and cleanup. Legacy paths and optimized paths are tested.
+Programming-duration debug logging covers the complete tone application,
+including readiness, not just wire time.

@@ -326,6 +326,15 @@ wsprrypi::BackendCompileResult WsprSi5351Backend::configure(
     si5351_plan_ = Si5351Planner(planner_config).buildPlan(
         planner_mode,
         tones);
+    for (auto& tone : si5351_plan_.tone_sets)
+    {
+        for (auto& write : tone.writes)
+        {
+            if (write.address >= 16 && write.address <= 18)
+                write.value = static_cast<std::uint8_t>((write.value & 0xfc) |
+                    static_cast<unsigned>(active_drive_strength_));
+        }
+    }
 
     {
         std::ostringstream stream;
@@ -1088,6 +1097,7 @@ bool WsprSi5351Backend::applyTone(
     std::size_t tone_index,
     bool rf_enabled)
 {
+    const auto programming_start = std::chrono::steady_clock::now();
     if (tone_index >= si5351_plan_.tone_sets.size())
         return false;
 
@@ -1123,16 +1133,17 @@ bool WsprSi5351Backend::applyTone(
             return false;
 
         const auto& writes = pll_only ? tone.pll_retune_candidate.pll_writes : tone.writes;
-        for (const Si5351Device::RegisterWrite& write : writes)
+        for (std::size_t begin = 0; begin < writes.size();)
         {
-            if (stop_requested_ || owner_.backendShouldStop())
+            if (stop_requested_ || owner_.backendShouldStop()) return false;
+            const std::size_t end = config_.device.optimize_register_writes
+                ? Si5351Device::writeGroupEnd(writes, begin) : begin + 1;
+            if (!(end == begin + 1
+                ? device_.writeRegister(writes[begin].address, writes[begin].value)
+                : device_.writeRegisters({writes.begin() + begin, writes.begin() + end})))
                 return false;
-
-            if (!device_.writeRegister(write.address, write.value))
-                return false;
-
-            if (stop_requested_ || owner_.backendShouldStop())
-                return false;
+            if (stop_requested_ || owner_.backendShouldStop()) return false;
+            begin = end;
         }
 
         if (pll_only || (rf_enabled && !inhibited)) {
@@ -1161,7 +1172,10 @@ bool WsprSi5351Backend::applyTone(
         stream << "Si5351 tone " << tone_index << ": requested RF="
                << format_frequency(tone.requested_hz)
                << ", calculated output="
-               << format_frequency(tone.actual_hz) << ".";
+               << format_frequency(tone.actual_hz) << ", programming_us="
+               << std::chrono::duration_cast<std::chrono::microseconds>(
+                   std::chrono::steady_clock::now() - programming_start).count()
+               << ".";
         log_si5351(owner_, WsprTransmitLogLevel::DEBUG, stream.str());
     }
     return true;
