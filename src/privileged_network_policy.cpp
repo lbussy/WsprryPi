@@ -89,6 +89,19 @@ PrivilegedOperationClass classify_privileged_http_operation(
         return PrivilegedOperationClass::reject;
     }
 
+    if (path.starts_with("/api/v1/")) {
+        if (method == "GET" && (path == "/api/v1/status" || path == "/api/v1/jobs" || path == "/api/v1/capabilities"))
+            return PrivilegedOperationClass::read_only;
+        // Remote management reads consume the sole TLS slot and host config
+        // reveals local administrator-managed references: protect these too.
+        if ((method == "GET" || method == "PUT") &&
+            (path == "/api/v1/config" || path == "/api/v1/schedules" || path == "/api/v1/network" || path == "/api/v1/host/config"))
+            return PrivilegedOperationClass::protected_operation;
+        if (method == "POST" && (path == "/api/v1/jobs" ||
+            (path.starts_with("/api/v1/jobs/") && path.ends_with("/abort") && path.size() == 51)))
+            return PrivilegedOperationClass::protected_operation;
+        return PrivilegedOperationClass::reject;
+    }
     if (is_support_bundle_path(path)) {
         return PrivilegedOperationClass::protected_operation;
     }

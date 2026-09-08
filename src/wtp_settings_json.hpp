@@ -4,7 +4,11 @@
 #include "json.hpp"
 #include "wtp_settings.hpp"
 inline nlohmann::json wtp_settings_json(const WtpSettings &s) {
-  return {{"Endpoint", s.path},
+  return {{"Transport", s.transport},
+          {"Hostname", s.hostname}, {"TCP Port", s.tcp_port},
+          {"TLS Server Identity", s.tls_identity}, {"TLS CA File", s.tls_ca},
+          {"TLS Client Certificate", s.tls_certificate}, {"TLS Client Key", s.tls_key},
+          {"Endpoint", s.path},
           {"USB Serial", s.usb_serial},
           {"USB Vendor ID", s.vendor_id},
           {"USB Product ID", s.product_id},
@@ -16,6 +20,12 @@ inline WtpSettings parse_wtp_settings(const nlohmann::json &j, bool selected) {
   WtpSettings s;
   if (!j.is_object())
     throw std::runtime_error("WTP settings must be an object.");
+  s.transport = j.value("Transport", s.transport);
+  s.hostname = j.value("Hostname", s.hostname);
+  s.tls_identity = j.value("TLS Server Identity", s.tls_identity);
+  s.tls_ca = j.value("TLS CA File", s.tls_ca);
+  s.tls_certificate = j.value("TLS Client Certificate", s.tls_certificate);
+  s.tls_key = j.value("TLS Client Key", s.tls_key);
   s.path = j.value("Endpoint", s.path);
   s.usb_serial = j.value("USB Serial", s.usb_serial);
   s.device_id = j.value("Device ID", s.device_id);
@@ -31,6 +41,7 @@ inline WtpSettings parse_wtp_settings(const nlohmann::json &j, bool selected) {
       throw std::runtime_error(std::string("Invalid WTP.") + key);
     return v.get<std::uint64_t>();
   };
+  s.tcp_port = static_cast<int>(integer("TCP Port", 0, 65535));
   s.vendor_id = static_cast<int>(integer("USB Vendor ID", 0, 65535));
   s.product_id = static_cast<int>(integer("USB Product ID", 0, 65535));
   s.start_uncertainty_ns = integer("Start Uncertainty ns", 1000000, 1000000000);

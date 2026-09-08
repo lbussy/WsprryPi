@@ -36,6 +36,40 @@ jobs:
       - name: Check container build export handling
         run: python3 scripts/tests/container_build_test.py
 
+  wtp-network-loopback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      WSPRRYPI_DISABLE_HARDWARE_ACCESS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install host-only TLS and UI test dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev libsystemd-dev pkg-config cmake python3 nodejs node-ws php-cli
+      - name: Read-only pinned Pico reference
+        uses: actions/checkout@v7
+        with:
+          repository: WsprryPi/WsprryPico
+          ref: 0fd8191c5218d3b5f2da9122a2ae55bf728ae3f2
+          path: src/build/network-reference/pico
+      - name: Read-only pinned Pico TLS dependency
+        uses: actions/checkout@v7
+        with:
+          repository: Mbed-TLS/mbedtls
+          ref: 0bebf8b8c7f07abe3571ded48a11aa907a1ffb20
+          path: src/build/network-reference/mbedtls
+          submodules: recursive
+      - name: Parent TLS, shared API and actual Pico interoperability
+        working-directory: src
+        run: |
+          make wtp-tls-test SUDO=
+          make wtp-network-runtime-test BACKENDS=simulated ANCILLARY_GPIO=0 SUDO=
+          make wtp-network-interop-test SUDO= PICO_SOURCE=build/network-reference/pico MBEDTLS_SOURCE=build/network-reference/mbedtls
+      - name: Render network controls with mocked responses
+        working-directory: WsprryPi-UI
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node tests/wtp_network_ui_integration_test.js
+
   strict-i2c-profile:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

@@ -22,6 +22,7 @@ public:
   void start();
   CleanupResult stop();
   CleanupResult recover();
+  bool idle_management(const std::function<void()> &);
   bool replaceable() const;
   bool ready() const;
   bool active() const noexcept { return active_.load(); }
@@ -44,6 +45,7 @@ private:
   std::thread worker_;
   std::atomic_bool active_{false}, ready_{false}, skip_pending_{false},
       skip_stop_{false};
+  bool idle_detached_{};
   std::uint64_t skip_start_ns_{};
   std::atomic<TransmissionMode> mode_{TransmissionMode::WSPR};
   std::mutex completion_mutex_;

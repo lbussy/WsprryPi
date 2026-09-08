@@ -824,6 +824,7 @@ function requestTransmitEnabledChange(enabled, previousEnabled, options = {}) {
 
     return ajaxWithEndpointFallback(SETTINGS_ENDPOINT, {
         type: "PATCH",
+        headers: window.WtpUi?.hostRevision ? { "If-Match": window.WtpUi.hostRevision } : {},
         contentType: "application/merge-patch+json",
         timeout: CONFIG_REQUEST_TIMEOUT_MS,
         data: JSON.stringify({
@@ -832,7 +833,8 @@ function requestTransmitEnabledChange(enabled, previousEnabled, options = {}) {
             },
         }),
     })
-        .done(function () {
+        .done(function (data, textStatus, xhr) {
+            window.WtpUi?.setHostRevision(xhr?.getResponseHeader?.("ETag"));
             lastSaveTimestamp = Date.now();
             if (onSuccess) {
                 onSuccess();
@@ -1534,6 +1536,7 @@ function persistDisabledModeChange(targetMode, previousMode = currentConfigModeS
 
     return ajaxWithEndpointFallback(SETTINGS_ENDPOINT, {
         type: "PATCH",
+        headers: window.WtpUi?.hostRevision ? { "If-Match": window.WtpUi.hostRevision } : {},
         contentType: "application/merge-patch+json",
         timeout: CONFIG_REQUEST_TIMEOUT_MS,
         data: JSON.stringify({
@@ -1543,7 +1546,8 @@ function persistDisabledModeChange(targetMode, previousMode = currentConfigModeS
             },
         }),
     })
-        .done(function () {
+        .done(function (data, textStatus, xhr) {
+            window.WtpUi?.setHostRevision(xhr?.getResponseHeader?.("ETag"));
             lastSaveTimestamp = Date.now();
             pendingPersistedMode = "";
             configAutosaveNeedsRuntimeRefresh = true;
@@ -2334,7 +2338,7 @@ function updateBackendPlatformSupportUi() {
     $backend.prop("disabled", currentBackend === "wtp" || !anyBackendSupported);
     $selectorHint.text(
         currentBackend === "wtp" ? (window.WtpUi.developmentControlsVisible
-            ? "Pico is selected below. Turn off Use Pico over USB to choose GPIO or Si5351."
+            ? "Pico is selected below. Turn off Use Pico to choose GPIO or Si5351."
             : "GPIO and Si5351 selection is unavailable while Pico is in use.") :
         rp1RouteSelectable && !gpioSupported
             ? rp1RouteSelectorHint()
@@ -4830,11 +4834,13 @@ function flushAutosave() {
 
     ajaxWithEndpointFallback(SETTINGS_ENDPOINT, {
         type: "PATCH",
+        headers: window.WtpUi?.hostRevision ? { "If-Match": window.WtpUi.hostRevision } : {},
         contentType: "application/merge-patch+json",
         timeout: CONFIG_REQUEST_TIMEOUT_MS,
         data: payloadJson,
     })
-        .done(function () {
+        .done(function (data, textStatus, xhr) {
+            window.WtpUi?.setHostRevision(xhr?.getResponseHeader?.("ETag"));
             configAutosaveNetworkPaused = false;
             lastSaveTimestamp = Date.now();
             lastSavedConfigPayload = payloadJson;

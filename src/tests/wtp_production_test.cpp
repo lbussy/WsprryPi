@@ -7,7 +7,11 @@
 #include "wtp_backend_peer.hpp"
 #include "wtp_runtime_bridge.hpp"
 #include "wtp_settings_json.hpp"
+#include "web_server_routes.hpp"
+#include "httplib.hpp"
+#include "backend_http_guard.hpp"
 #include <fstream>
+#include <filesystem>
 #include <thread>
 #include <unistd.h>
 using namespace std::chrono_literals;
@@ -21,7 +25,7 @@ struct Clock : wsprrypi::WtpScheduleClock {
   }
   void wait_ms(std::uint64_t n) override { peer.advance(peer.now + n); }
 };
-void run() {
+void run(const std::string &credentials) {
   char filename[] = "/tmp/wtp-production-config-XXXXXX";
   const int fd = mkstemp(filename);
   CHECK(fd >= 0);
@@ -45,6 +49,55 @@ void run() {
   config.frequencies = "20m";
   resolve_backend_specific_config(config);
   config_to_json();
+  // Active host-config routes use the same guarded authority and revision CAS.
+  httplib::Server http;
+  web_server_routes::register_control(http, [](httplib::Response &) {});
+  http.set_pre_routing_handler([](const httplib::Request &request, httplib::Response &response) {
+    const SupportRequestGuardSnapshot trust{true, "localhost", {}, {}};
+    const auto origin = request.has_header("Origin") ? std::optional<std::string>(request.get_header_value("Origin")) : std::nullopt;
+    if (evaluate_backend_http_request(request.method, request.path, request.remote_addr,
+        request.get_header_value("Host"), origin, trust) == BackendHttpGuardDecision::rejected) {
+      response.status = 403; return httplib::Server::HandlerResponse::Handled;
+    }
+    return httplib::Server::HandlerResponse::Unhandled;
+  });
+  const int port = http.bind_to_any_port("127.0.0.1"); CHECK(port > 0);
+  std::thread serving([&] { http.listen_after_bind(); });
+  struct StopHttp { httplib::Server &server; std::thread &thread; ~StopHttp() { server.stop(); thread.join(); } } stop_http{http, serving};
+  httplib::Client browser("127.0.0.1", port);
+  browser.set_read_timeout(15, 0);
+  const std::string authority = "localhost:" + std::to_string(port);
+  const httplib::Headers read_headers{{"Host", authority}};
+  auto resource = browser.Get("/api/v1/host/config", read_headers);
+  CHECK(resource && resource->status == 200 && resource->has_header("ETag"));
+  CHECK(!resource->has_header("Access-Control-Allow-Origin"));
+  const auto revision = resource->get_header_value("ETag");
+  httplib::Headers headers{{"Host", authority}, {"Origin", "http://" + authority},
+    {"X-WsprryPico-Request", "1"}, {"If-Match", revision}};
+  const std::string patch = R"({"Operation":{"Transmit Backend":"wtp"},"WTP":{"Endpoint":"/dev/ttyACM1","USB Serial":"000012345678","USB Vendor ID":51966,"USB Product ID":16402,"Device ID":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","Hostname":"preserved.local","TCP Port":18443,"TLS Server Identity":"certificate.local","TLS CA File":"/etc/pico/ca.crt","TLS Client Certificate":"/etc/pico/client.crt","TLS Client Key":"/etc/pico/client.key"}})";
+  auto updated = browser.Put("/api/v1/host/config", headers, patch, "application/json");
+  if (updated && updated->status != 200) {
+    std::cerr << updated->status << " " << updated->body << "\n";
+  }
+  CHECK(updated && updated->status == 200 && updated->get_header_value("ETag") != revision);
+  auto stale = browser.Put("/api/v1/host/config", headers, patch, "application/json");
+  CHECK(stale && stale->status == 412);
+  RuntimeConfigCandidate network_candidate;
+  prepare_runtime_config_candidate(filename, network_candidate);
+  CHECK(network_candidate.valid && network_candidate.normalized_config.wtp.hostname == "preserved.local");
+  CHECK(network_candidate.normalized_config.wtp.tls_identity == "certificate.local");
+  CHECK(network_candidate.normalized_config.wtp.tls_key == "/etc/pico/client.key");
+  headers.erase("If-Match");
+  auto missing = browser.Put("/api/v1/host/config", headers, "{}", "application/json");
+  CHECK(missing && missing->status == 428);
+  headers.erase("Origin");
+  auto csrf = browser.Put("/api/v1/host/config", headers, "{}", "application/json");
+  CHECK(csrf && csrf->status == 403);
+  headers.emplace("Origin", "http://evil");
+  auto evil = browser.Put("/api/v1/host/config", headers, "{}", "application/json");
+  CHECK(evil && evil->status == 403);
+  auto unknown = browser.Get("/api/v1/unknown", read_headers);
+  CHECK(unknown && unknown->status == 403);
   const auto old_gpio = jConfig.at("GPIO");
   WtpSettings settings{"/dev/ttyACM1", "000012345678", backend_test::device,
                        0xcafe,         0x4012,         1000};
@@ -73,6 +126,15 @@ void run() {
     }
     CHECK(rejected && jConfig == before && config.wtp == settings);
   }
+  const auto common_revision = get_public_config_snapshot().second;
+  std::atomic<unsigned> accepted{0}, conflicts{0};
+  const auto concurrent_patch = [&](unsigned value) {
+    try { (void)patch_all_from_web_revision({{"WTP", {{"Start Uncertainty ns", value}}}}, common_revision); ++accepted; }
+    catch (const std::exception &error) { CHECK(std::string(error.what()) == "revision_conflict"); ++conflicts; }
+  };
+  std::thread first(concurrent_patch, 1001), second(concurrent_patch, 1002);
+  first.join(); second.join(); CHECK(accepted == 1 && conflicts == 1);
+  patch_all_from_web({{"WTP", wtp_settings_json(settings)}});
   ArgParserConfig copy;
   copy_runtime_config(config, copy);
   CHECK(copy.wtp == settings);
@@ -152,13 +214,37 @@ void run() {
   transmitter_stop_and_join();
   select_wtp_runtime(std::nullopt);
   CHECK(!wtp_runtime_selected());
+  if (!credentials.empty()) {
+    auto network = settings;
+    network.transport = "network"; network.hostname = "pico-test.local"; network.tcp_port = 18444;
+    network.tls_ca = credentials + "/ca.crt";
+    network.tls_certificate = credentials + "/runtime-rotation.crt";
+    network.tls_key = credentials + "/runtime-rotation.key";
+    const auto copy_credentials = [&](const std::string &name) {
+      std::filesystem::copy_file(credentials + "/" + name + ".crt", network.tls_certificate, std::filesystem::copy_options::overwrite_existing);
+      std::filesystem::copy_file(credentials + "/" + name + ".key", network.tls_key, std::filesystem::copy_options::overwrite_existing);
+    };
+    copy_credentials("client");
+    Clock rotation_clock;
+    set_wtp_runtime_for_test(network, rotation_clock, rotation_clock.peer,
+        {backend_test::sid, backend_test::owner_id, backend_test::device}, [&] { rotation_clock.peer.open(); return true; });
+    CHECK(wtp_runtime_inspect().ok);
+    wtp_runtime_prepare(request);
+    CHECK(wtp_runtime_selection_error(network).empty());
+    copy_credentials("other");
+    CHECK(!wtp_runtime_selection_error(network).empty());
+    CHECK(wtp_runtime_stop().ok);
+    CHECK(wtp_runtime_selection_error(network).empty());
+    select_wtp_runtime(std::nullopt);
+    std::filesystem::remove(network.tls_certificate); std::filesystem::remove(network.tls_key);
+  }
   std::cout << backend_test::checks
             << " production WTP configuration/runtime checks passed\n";
 }
 } // namespace
-int main() {
+int main(int argc, char **argv) {
   try {
-    run();
+    run(argc > 1 ? argv[1] : "");
   } catch (const std::exception &e) {
     std::cerr << e.what() << '\n';
     return 1;

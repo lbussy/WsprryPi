@@ -3,6 +3,8 @@
 (function (root) {
     "use strict";
     const defaults = Object.freeze({
+        "Transport": "usb", "Hostname": "", "TCP Port": 0, "TLS Server Identity": "",
+        "TLS CA File": "", "TLS Client Certificate": "", "TLS Client Key": "",
         "Endpoint": "", "USB Serial": "", "Device ID": "",
         "USB Vendor ID": 0, "USB Product ID": 0,
         "Start Uncertainty ns": 1000000, "Allow Frequency Adjustment": false
@@ -14,14 +16,25 @@
             if (typeof value !== "string" || value.length > max || /[\x00-\x1f\x7f]/.test(value))
                 result[key] = `Enter a valid ${key.toLowerCase()}.`;
         }
+        if (!["usb", "network"].includes(settings.Transport)) result.Transport = "Choose USB or network.";
+        const network = settings.Transport === "network";
+        for (const key of ["Hostname", "TLS Server Identity", "TLS CA File", "TLS Client Certificate", "TLS Client Key"]) {
+            const value = settings[key];
+            if (typeof value !== "string" || value.length > (key.includes("TLS C") ? 512 : 253) || /[\x00-\x1f\x7f]/.test(value)) result[key] = "Enter a valid local reference or identity.";
+        }
+        if (selected && network) {
+            if (!settings.Hostname || !/^[a-zA-Z0-9.:-]+$/.test(settings.Hostname)) result.Hostname = "Enter a hostname or literal IP address, without a URL or port.";
+            for (const key of ["TLS CA File", "TLS Client Certificate", "TLS Client Key"]) if (!settings[key].startsWith("/")) result[key] = "Enter an absolute file path on the WsprryPi host.";
+        }
+        if (!Number.isInteger(settings["TCP Port"]) || settings["TCP Port"] < (selected && network ? 1 : 0) || settings["TCP Port"] > 65535) result["TCP Port"] = "Enter the configured TLS port (1–65535).";
         if (selected) {
-            if (!String(settings.Endpoint).startsWith("/dev/") || settings.Endpoint.includes("/../")) result.Endpoint = "Select the dedicated WTP device path under /dev/.";
-            if (!settings["USB Serial"]) result["USB Serial"] = "Enter the selected device's USB serial.";
+            if (!network && !String(settings.Endpoint).startsWith("/dev/") || (!network && settings.Endpoint.includes("/../"))) result.Endpoint = "Select the dedicated WTP device path under /dev/.";
+            if (!network && !settings["USB Serial"]) result["USB Serial"] = "Enter the selected device's USB serial.";
             if (!/^[0-9a-f]{32}$/.test(settings["Device ID"])) result["Device ID"] = "Enter 32 lowercase hexadecimal characters.";
         }
         for (const key of ["USB Vendor ID", "USB Product ID", "Start Uncertainty ns"]) {
             const value = settings[key];
-            const minimum = key === "Start Uncertainty ns" || selected ? 1 : 0;
+            const minimum = key === "Start Uncertainty ns" || (selected && !network) ? 1 : 0;
             const maximum = key === "Start Uncertainty ns" ? 1000000000 : 65535;
             if (!Number.isInteger(value) || value < minimum || value > maximum) result[key] = `Enter a whole number from ${minimum} to ${maximum}.`;
         }
@@ -53,7 +66,8 @@
     if (typeof module !== "undefined" && module.exports) module.exports = { defaults, errors, summarize };
     if (!root.document) return;
     const byId = id => root.document.getElementById(id);
-    let saved = { ...defaults }, snapshot = null, busy = false, timer = null, initialized = false, visible = false, closed = false, statusReadFailed = false;
+    let saved = { ...defaults }, snapshot = null, busy = false, timer = null, initialized = false, visible = false, closed = false, statusReadFailed = false, hostRevision = "", cancelling = false;
+    let browserSession = "";
     const selected = () => byId("wtp_use")?.checked === true;
     function read() {
         const result = { ...saved };
@@ -75,8 +89,16 @@
         byId("wtp-development").hidden = !visible && !selected();
         byId("wtp_use").disabled = !visible;
         root.document.querySelectorAll("[data-wtp-key]").forEach(field => { field.disabled = !visible || !selected(); });
+        const network = read().Transport === "network";
+        root.document.querySelectorAll("[data-wtp-transport]").forEach(group => { group.hidden = group.dataset.wtpTransport !== (network ? "network" : "usb"); });
+        const n = snapshot?.network;
+        if (byId("wtp-network-state")) byId("wtp-network-state").textContent = n
+            ? `${n.hostname}:${n.port} · ${n.state}. Address: ${n.resolved_address || "unresolved"}. Last authenticated identity: ${n.authenticated_identity || "unconfirmed"}. Observation age: ${n.observed_ms && snapshot.now_ms ? Math.max(0, Number(BigInt(snapshot.now_ms) - BigInt(n.observed_ms))) + " ms" : "unknown"}. ${n.diagnostic || ""}`
+            : "Network connection is unconfirmed.";
+        root.WtpManagement?.setAvailability(visible && selected() && network && snapshot?.selected === true && snapshot.ready === true && snapshot.phase === "idle" && !snapshot.worker_active && !snapshot.recovery_required && !snapshot.owns);
         const state = summarize(snapshot);
         for (const [id, value] of [["wtp-status-text", state.text], ["wtp-output", state.output], ["wtp-clock", state.clock], ["wtp-identity", state.identity], ["wtp-history", state.history]]) byId(id).textContent = value;
+        if (byId("wtp-cancel")) byId("wtp-cancel").disabled = cancelling || !selected() || snapshot?.selected !== true || !snapshot?.job_id || !(snapshot.owns || snapshot.phase === "waiting");
         byId("wtp-recover").disabled = busy || !selected() || !state.recover;
         if (selected() && typeof root.updateBackendPlatformSupportUi === "function") root.updateBackendPlatformSupportUi();
         else if (typeof root.syncTransmitAvailabilityUi === "function") root.syncTransmitAvailabilityUi();
@@ -91,8 +113,9 @@
         if (recover) byId("wtp-feedback").textContent = "Reconciling the current session…";
         let receivedStatus = false;
         try {
-            const url = root.WSPRRYPI_PATHS?.wtpPath || "/api/wtp";
-            const response = await root.fetch(url + (recover ? "/recover" : ""), {
+            const url = recover ? (root.WSPRRYPI_PATHS?.wtpPath || "/api/wtp") + "/recover"
+                : (root.WSPRRYPI_PATHS?.sharedApiPath || "/api/v1") + "/status";
+            const response = await root.fetch(url, {
                 method: recover ? "POST" : "GET", cache: "no-store", signal: controller.signal,
                 ...(recover ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "reconcile" }) } : {})
             });
@@ -100,7 +123,7 @@
             if (recover && data.status) { snapshot = data.status; receivedStatus = true; }
             if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
             if (!recover) {
-                snapshot = data;
+                snapshot = data.host || data;
                 if (statusReadFailed) byId("wtp-feedback").textContent = "Status connection restored.";
                 statusReadFailed = false;
             }
@@ -129,6 +152,8 @@
         render();
     }
     root.WtpUi = { selected, read, validate, populate,
+        get hostRevision() { return hostRevision; },
+        setHostRevision(value) { if (typeof value === "string" && value) hostRevision = value; },
         get developmentControlsVisible() { return visible; },
         set developmentControlsVisible(value) {
             if (typeof value !== "boolean") throw new TypeError("developmentControlsVisible must be a boolean.");
@@ -145,11 +170,37 @@
                 ? "" : "Pico and host UTC readiness are unconfirmed. Review Pico status before enabling transmission.";
         }
     };
+    async function cancelJob() {
+        const job = snapshot?.job_id;
+        if (byId("wtp-cancel").disabled || !job) return;
+        cancelling = true; render();
+        const feedback = byId("wtp-feedback");
+        feedback.textContent = "Cancelling the current Pico job…";
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45000);
+        try {
+            if (!browserSession) browserSession = Array.from(root.crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+            const requestId = Array.from(root.crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+            const response = await root.fetch((root.WSPRRYPI_PATHS?.sharedApiPath || "/api/v1") + "/jobs", {
+                method: "POST", cache: "no-store", signal: controller.signal,
+                headers: { "Content-Type": "application/json", "X-WsprryPico-Request": "1" },
+                body: JSON.stringify({session_id: browserSession, request_id: requestId, operation: "ABORT", body: {job_id: job}})
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error?.code || "Cancellation was not confirmed");
+            feedback.textContent = "Cleanup confirmed. Review the job outcome and output observation above.";
+        } catch (error) {
+            snapshot = null;
+            feedback.textContent = `Cancellation is unconfirmed: ${error.message}. Review status and reconcile before further work.`;
+        } finally { clearTimeout(timeout); cancelling = false; render(); request(); }
+    }
     function init() {
         if (!byId("wtp-controls")) return;
         initialized = true;
         populate(saved);
         byId("wtp_use").addEventListener("change", () => { render(); root.clickTransmitBackend?.(); request(); });
+        root.document.querySelectorAll("[data-wtp-key]").forEach(field => field.addEventListener("change", () => { render(); validate(); }));
+        byId("wtp-cancel")?.addEventListener("click", cancelJob);
         byId("wtp-recover").addEventListener("click", () => request(true));
         root.addEventListener("pagehide", () => { closed = true; clearTimeout(timer); });
         root.addEventListener("pageshow", () => { closed = false; request(); });

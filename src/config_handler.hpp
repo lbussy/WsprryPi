@@ -39,6 +39,7 @@
 #include "json.hpp"
 
 #include <stdexcept>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -51,6 +52,14 @@
  * `IniFile::instance()`.
  */
 inline auto &iniFile = IniFile::instance();
+
+// Serializes public revision snapshots with JSON/INI reload and web mutations.
+// Translation/persistence helpers nest inside an already locked update.
+inline std::recursive_mutex &config_update_mutex() {
+    static std::recursive_mutex mutex;
+    return mutex;
+}
+
 
 /**
  * @brief Global JSON configuration object.
@@ -339,6 +348,8 @@ nlohmann::json get_public_config_json();
  * @throws May throw exceptions from internal calls (e.g., parsing or write errors).
  */
 void patch_all_from_web(const nlohmann::json &j);
+std::string patch_all_from_web_revision(const nlohmann::json &j, const std::string &expected_revision);
+std::pair<nlohmann::json, std::string> get_public_config_snapshot();
 void set_patch_all_from_web_runtime_apply_suppressed_for_test(bool suppressed) noexcept;
 bool persist_rp1_gpclk_route_config(int gpio, std::string *error_message = nullptr) noexcept;
 

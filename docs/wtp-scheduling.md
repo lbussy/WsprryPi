@@ -163,9 +163,9 @@ Its future follow-up must distinguish early preparation from on-device RF start,
 explain host/device clock prerequisites, pending versus committed reload, missed
 slots and blocked recovery, alongside endpoint selection and USB permissions.
 
-The [status/recovery boundary](wtp-status-recovery.md) now publishes coherent
-observations from this scheduler. Next is production configuration/operator
-integration with this dedicated scheduler. Future UI must use Impeccable and the requested
-UI-level development toggle. Production lifecycle integration, actual Linux USB,
-DTR/unplug behavior, firmware hardware execution, RF qualification and release
-readiness still require separate work and evidence. Phase 10 is not complete.
+The [production integration](wtp-production-integration.md) now connects this
+scheduler to persisted USB/network selection, application lifecycle and the gated
+UI. [Network integration](wtp-network.md) adds TLS without a second scheduler.
+Physical timing, USB/DTR/unplug, services and RF still require their own evidence.
+The earlier slice records describe historical scope rather than current missing
+software integration.

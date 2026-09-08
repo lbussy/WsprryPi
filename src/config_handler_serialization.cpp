@@ -372,6 +372,7 @@ void apply_public_config_to_internal_json(
 
 void config_to_json()
 {
+    std::lock_guard update_lock(config_update_mutex());
     config_handler_serialization::serialize_runtime_config_to_json(
         config, jConfig);
 }

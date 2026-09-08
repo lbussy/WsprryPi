@@ -59,6 +59,7 @@ StartupQuiesceResult WtpApplication::connect_idle() {
   }
   auto result = scheduler_.inspect_idle();
   ready_ = result.ok;
+  if (result.ok) idle_detached_ = false;
   return result;
 }
 StartupQuiesceResult WtpApplication::inspect() {
@@ -243,6 +244,9 @@ bool WtpApplication::ready() const {
 }
 bool WtpApplication::replaceable() const {
   const auto s = scheduler_.status();
+  if (idle_detached_ && !active_ && !skip_pending_ &&
+      s.phase == WtpSchedulePhase::Idle && !s.uncertain && !s.safety_fault)
+    return true;
   // A path that never negotiated and never submitted work may be corrected.
   if (!active_ && !skip_pending_ && s.phase == WtpSchedulePhase::Idle &&
       !s.identity && s.job_id.empty() && !s.uncertain && !s.safety_fault &&
@@ -255,6 +259,20 @@ bool WtpApplication::replaceable() const {
          s.remote->state != wtp::State::Loaded &&
          s.remote->state != wtp::State::Armed &&
          s.remote->state != wtp::State::Running;
+}
+bool WtpApplication::idle_management(const std::function<void()> &request) {
+  std::lock_guard lock(control_);
+  if (active_ || skip_pending_ || scheduler_.phase() != WtpSchedulePhase::Idle)
+    return false;
+  join();
+  if (!connect_idle().ok || !replaceable()) return false;
+  scheduler_.disconnect();
+  ready_ = false;
+  idle_detached_ = true; // Fresh unowned/inactive evidence preceded deliberate close.
+  try { request(); }
+  catch (...) { (void)connect_idle(); throw; }
+  (void)connect_idle(); // Read-only same-session negotiation; never recovery.
+  return true;
 }
 std::optional<WtpScheduleReport> WtpApplication::take_completion() {
   if (active_)

@@ -1576,7 +1576,8 @@ function populateConfig(callback = null) {
     populateConfigRunning = true;
 
     getJsonWithEndpointFallback(SETTINGS_ENDPOINT)
-        .done(function (configJson) {
+        .done(function (configJson, textStatus, xhr) {
+            window.WtpUi?.setHostRevision(xhr?.getResponseHeader?.("ETag"));
             try {
                 if (!configJson || typeof configJson !== "object") {
                     throw new Error("Invalid JSON data received.");

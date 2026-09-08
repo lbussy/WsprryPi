@@ -83,3 +83,9 @@ If you want to get started and not read anything, here is how to install it:
 ``` bash
 curl -L installwspr.aa0nt.net | sudo bash
 ```
+
+Authenticated Pico network integration is documented in
+[WTP network configuration](docs/wtp-network.md) and the
+[shared browser API](docs/wtp-browser-api.md). See the
+[Phase 11.1 software acceptance record](docs/development/phase11-1-review.md)
+for tests and remaining physical/Phase 11 dependencies.

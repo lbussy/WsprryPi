@@ -105,7 +105,7 @@ An ARM acknowledgment is checked against the submitted job/start/uncertainty,
 the advertised lead/horizon/holdover/uncertainty limits, the returned UTC-to-
 monotonic mapping, both job-end arithmetic bounds and pending-leap exclusion.
 This is validation of an acknowledgment, not a new host clock source or the
-future scheduler's full preparation/admission policy. Device UTC must already
+parent scheduler's full preparation/admission policy. Device UTC must already
 be independently provisioned. GET_CLOCK observes it; this component cannot
 set it or compensate by changing the requested start.
 
@@ -156,8 +156,8 @@ automatic STATUS/reconnect cannot clear it. Safe matching ABORT remains availabl
 where the server lifecycle permits it. Other new mutations remain blocked.
 
 `disconnect()` is local cancellation/shutdown, not remote ABORT. It preserves
-uncertain work and invalidates output evidence. The future backend must consume
-and report unresolved results during shutdown. This slice provides no durable
+uncertain work and invalidates output evidence. The parent backend consumes
+and reports unresolved results during shutdown. This slice provides no durable
 process-restart recovery or physical emergency-stop mechanism.
 
 ## Tests and reference endpoint
@@ -184,3 +184,11 @@ STATUS observations may skip intermediate states after disconnection, so that
 graph is not applied as an adjacency rule to client observations. Session tests
 exercise admission/reconciliation, and the optional test exercises actual server
 transitions. No full protocol/firmware conformance claim is made.
+
+## Parent network integration
+
+Phase 11.1 supplies authenticated TLS in the parent integration layer, alongside
+USB, through this same byte-stream contract. TLS, resolution, credentials, worker
+ownership and shared browser resources remain outside this portable library.
+See [parent network contract](../../docs/wtp-network.md). The existing provenance
+pin and normative protocol ownership are unchanged.

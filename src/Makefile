@@ -45,8 +45,8 @@ SYSTEMD_CFLAGS :=
 SYSTEMD_LIBS   :=
 HAVE_JOURNALD  := 0
 
-OPENSSL_CFLAGS := $(strip $(shell pkg-config --cflags libcrypto 2>/dev/null))
-OPENSSL_LIBS   := $(strip $(shell pkg-config --libs libcrypto 2>/dev/null))
+OPENSSL_CFLAGS := $(strip $(shell pkg-config --cflags openssl 2>/dev/null))
+OPENSSL_LIBS   := $(strip $(shell pkg-config --libs openssl 2>/dev/null))
 
 # Prefer pkg-config for libsystemd, but also allow header-only detection as fallback.
 ifeq ($(shell pkg-config --exists libsystemd 2>/dev/null && echo yes),yes)
@@ -1872,3 +1872,38 @@ $(BIN_DIR)/wtp_production_test: tests/wtp_production_test.cpp $(SEMANTICS_TEST_D
 wtp-production-test: $(BIN_DIR)/wtp_production_test
 	$(Q)WSPRRYPI_DISABLE_HARDWARE_ACCESS=1 ./$(BIN_DIR)/wtp_production_test
 	$(Q)node ../WsprryPi-UI/tests/wtp_ui_test.js
+
+# Parent network adapters; no physical USB/RF. The explicit interoperability
+# runner starts only the pinned Pico server's loopback host adapter.
+WTP_NETWORK_BUILD_DIR ?= build/wtp-network
+WTP_NETWORK_CXXFLAGS ?= -O2 -g
+WTP_NETWORK_LDFLAGS ?=
+WTP_NETWORK_FLAGS = -std=c++20 -pthread -Wall -Wextra -Wpedantic -Werror $(WTP_NETWORK_CXXFLAGS) -I. -IWTP-Client/include $(OPENSSL_CFLAGS)
+.PHONY: wtp-api-test wtp-tls-build wtp-network-interop-test
+wtp-api-test:
+	$(Q)mkdir -p "$(WTP_NETWORK_BUILD_DIR)"
+	$(Q)$(CXX) $(WTP_NETWORK_FLAGS) tests/wtp_browser_api_test.cpp wtp_integration/browser_api.cpp privileged_network_policy.cpp $(WTP_NETWORK_LDFLAGS) -o "$(WTP_NETWORK_BUILD_DIR)/wtp_browser_api_test"
+	$(Q)"$(WTP_NETWORK_BUILD_DIR)/wtp_browser_api_test"
+	$(Q)node ../WsprryPi-UI/tests/wtp_ui_test.js
+wtp-tls-build:
+	$(Q)pkg-config --atleast-version=3.0 openssl || { echo "OpenSSL 3 development headers/libraries and pkg-config are required" >&2; exit 1; }
+	$(Q)mkdir -p "$(WTP_NETWORK_BUILD_DIR)"
+	$(Q)$(MAKE) --no-print-directory -C WTP-Client all BUILD_DIR="$(abspath $(WTP_NETWORK_BUILD_DIR)/client)" CXXFLAGS="$(WTP_NETWORK_CXXFLAGS)"
+	$(Q)$(CXX) $(WTP_NETWORK_FLAGS) tests/wtp_tls_probe.cpp wtp_integration/tls.cpp $(OPENSSL_LIBS) $(WTP_NETWORK_LDFLAGS) -o "$(WTP_NETWORK_BUILD_DIR)/wtp_tls_probe"
+	$(Q)$(CXX) $(WTP_NETWORK_FLAGS) tests/wtp_network_interop_test.cpp wtp_integration/tls.cpp wtp_integration/network_http.cpp \
+		wtp_integration/application.cpp wtp_integration/status.cpp wtp_integration/scheduler.cpp wtp_integration/backend.cpp wtp_integration/execution_plan.cpp \
+		WSPR-Transmitter/src/execution_plan_compiler.cpp WSPR-Transmitter/src/transmission_controller.cpp \
+		"$(WTP_NETWORK_BUILD_DIR)/client/libwtp_client.a" $(OPENSSL_LIBS) $(WTP_NETWORK_LDFLAGS) -o "$(WTP_NETWORK_BUILD_DIR)/wtp_network_interop_test"
+wtp-network-interop-test: wtp-tls-build wtp-api-test
+	$(Q)cmake -S tests/network -B "$(WTP_NETWORK_BUILD_DIR)" -DPICO_SOURCE="$(abspath $(PICO_SOURCE))" -DMBEDTLS_SOURCE="$(abspath $(MBEDTLS_SOURCE))"
+	$(Q)cmake --build "$(WTP_NETWORK_BUILD_DIR)" -j 4
+	$(Q)python3 -B tests/wtp_network_interop_test.py "$(abspath $(WTP_NETWORK_BUILD_DIR))"
+
+.PHONY: wtp-tls-test
+wtp-tls-test: wtp-tls-build
+	$(Q)$(CXX) $(WTP_NETWORK_FLAGS) tests/wtp_tls_contract_test.cpp wtp_integration/tls.cpp $(OPENSSL_LIBS) $(WTP_NETWORK_LDFLAGS) -o "$(WTP_NETWORK_BUILD_DIR)/wtp_tls_contract_test"
+	$(Q)python3 -B tests/wtp_tls_test.py "$(abspath $(WTP_NETWORK_BUILD_DIR))"
+
+.PHONY: wtp-network-runtime-test
+wtp-network-runtime-test: $(BIN_DIR)/wtp_production_test
+	$(Q)WSPRRYPI_DISABLE_HARDWARE_ACCESS=1 ./$(BIN_DIR)/wtp_production_test "$(abspath $(WTP_NETWORK_BUILD_DIR)/tls-fixtures)"

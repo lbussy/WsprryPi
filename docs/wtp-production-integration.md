@@ -2,7 +2,9 @@
 
 WsprryPi can explicitly select a Pico WTP/1 endpoint using persisted settings
 and `--backend wtp`. The parent application owns the complete-job scheduler,
-worker, Linux USB CDC adapter and explicit recovery lifecycle. The web interface
+worker, Linux USB CDC or authenticated TLS network adapter and explicit recovery lifecycle.
+See [network configuration and credentials](wtp-network.md) and
+[shared browser API](wtp-browser-api.md) for Phase 11.1. The web interface
 can reveal Pico settings through a browser-console boolean. This is
 implemented software integration; physical USB, target lifecycle, timing and RF
 qualification remain separate acceptance work.
@@ -20,11 +22,11 @@ The boolean updates the Transmitter tab immediately; there is no visible
 visibility switch. Read `window.WtpUi.developmentControlsVisible` to check it.
 Only boolean values are accepted (not strings such as `"false"`). It defaults to
 false on every page load and lasts only for that page. Reloading hides the
-entire Pico panel, including **Use Pico over USB**, until the console boolean
+entire Pico panel, including **Use Pico**, until the console boolean
 is explicitly set to true again. Previously saved browser visibility preferences
 are ignored; this boolean does not read or write browser storage.
 
-**Use Pico over USB** is the separate, persisted backend selection. Hiding the
+**Use Pico** is the separate, persisted backend selection. Hiding the
 controls preserves saved selection and field drafts; a passive notice identifies
 Pico when it remains selected. Visibility changes do not save configuration,
 enable transmission, select another output, reconcile the device or clear
@@ -32,10 +34,11 @@ recovery faults. Status polling continues while Pico is selected, even when its
 controls are hidden. This console preference is a development convenience, not
 an access-control boundary.
 
-An explicit endpoint requires all of the following:
+An explicit USB endpoint requires all of the following:
 
 | Setting in `[WTP]` | Meaning |
 | --- | --- |
+| `Transport` | Explicit `usb` or `network`; omitted legacy values mean `usb`. Network fields are documented in the network guide. |
 | `Endpoint` | Selected WTP character-device path under `/dev/`; stable by-id aliases are accepted after identity checks. |
 | `USB Serial` | Exact serial string, including any leading zeros. |
 | `USB Vendor ID` / `USB Product ID` | Decimal integers from 1 through 65535 for the selected device. |
@@ -76,7 +79,7 @@ clock check calibrates RF frequency.
 The parent prepares complete finite WSPR, QRSS, FSKCW and DFCW jobs using the
 existing canonical encoders. One intended WSPR frame is loaded per slot. An
 explicitly bounded Tone request is supported by the runtime API; the existing
-continuous Test Tone workflow is rejected for WTP. No per-symbol USB control,
+continuous Test Tone workflow is rejected for WTP. No per-symbol transport control,
 local output fallback or implicit infinite repeat is used.
 
 New automatic jobs have at least eight seconds' preparation lead, increased to
@@ -136,7 +139,8 @@ The parent application links WTP alongside its configured reusable transmitter
 profile and reports it in `--list-backends`. There is no `BACKENDS=wtp` component
 profile: the reusable transmitter factory does not own USB sessions. Portable
 macOS builds still use `BACKENDS=simulated ANCILLARY_GPIO=0` for that component;
-production WTP device access is Linux-only. The native WTP opener honors
+native USB identity checks are Linux-only. TLS software is also exercised on macOS;
+production deployment and host UTC admission remain targeted at Linux. The native WTP opener honors
 `WSPRRYPI_DISABLE_HARDWARE_ACCESS=1`. Injected clocks/streams are typed C++ test
 seams, with no public API or configuration selector.
 

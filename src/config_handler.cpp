@@ -54,6 +54,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <openssl/sha.h>
 #include <optional>
 #include <shared_mutex>
 #include <stdexcept>
@@ -114,7 +115,6 @@ std::string transmit_backend_unavailable_message(TransmitBackendKind backend)
 namespace
 {
     bool g_patch_all_from_web_runtime_apply_suppressed_for_test = false;
-    std::mutex g_config_update_mutex;
     std::atomic<double> g_published_wspr_audio_offset_hz{WSPR_AUDIO_OFFSET_HZ};
     std::shared_mutex g_test_tone_planning_snapshot_mutex;
     TestTonePlanningConfigSnapshot g_test_tone_planning_snapshot{};
@@ -1359,7 +1359,7 @@ namespace
                     continue;
                 }
 
-                if (section == "WTP" && (key == "Endpoint" || key == "USB Serial" || key == "Device ID"))
+                if (section == "WTP" && wtp_settings_json(WtpSettings{}).value(key, nlohmann::json()).is_string())
                     patch[section][key] = trimmed;
                 else
                     patch[section][key] = parse_ini_value(trimmed);
@@ -1491,23 +1491,41 @@ namespace
 
 void init_config_json()
 {
+    std::lock_guard update_lock(config_update_mutex());
     init_config_json_impl(jConfig);
 }
 
 void ini_to_json(std::string filename)
 {
+    std::lock_guard update_lock(config_update_mutex());
     ini_to_json_impl(filename, iniFile.getData(), jConfig);
 }
 
 void json_to_config()
 {
+    std::lock_guard update_lock(config_update_mutex());
     config_handler_deserialization::deserialize_json_to_runtime_config(
         jConfig, config);
     publish_test_tone_planning_config(config);
 }
 
+namespace {
+std::string config_revision_locked() {
+    const auto bytes = jConfig.dump();
+    unsigned char digest[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char *>(bytes.data()), bytes.size(), digest);
+    std::string result = "\"";
+    for (unsigned char c : digest) { result += "0123456789abcdef"[c >> 4]; result += "0123456789abcdef"[c & 15]; }
+    return result + "\"";
+}
+}
+std::pair<nlohmann::json, std::string> get_public_config_snapshot() {
+    std::lock_guard lock(config_update_mutex());
+    return {config_handler_serialization::public_config_from_internal_json(jConfig), config_revision_locked()};
+}
 nlohmann::json get_public_config_json()
 {
+    std::lock_guard update_lock(config_update_mutex());
     return config_handler_serialization::public_config_from_internal_json(
         jConfig);
 }
@@ -1695,6 +1713,7 @@ void persist_config_json(const nlohmann::json &source)
 
 void json_to_ini()
 {
+    std::lock_guard update_lock(config_update_mutex());
     if (!config.use_ini)
     {
         return;
@@ -1816,6 +1835,7 @@ void prepare_ini_config_candidate(
 
 void commit_config_candidate(const PreparedConfigCandidate &candidate)
 {
+    std::lock_guard update_lock(config_update_mutex());
     if (!candidate.valid)
     {
         throw std::invalid_argument(
@@ -1851,9 +1871,13 @@ void dump_json(const nlohmann::json &j, std::string tag)
     llog.logS(DEBUG, tag, "JSON Dump: ", j.dump());
 }
 
-void patch_all_from_web(const nlohmann::json &j)
+void patch_all_from_web(const nlohmann::json &j) { (void)patch_all_from_web_revision(j, {}); }
+
+std::string patch_all_from_web_revision(const nlohmann::json &j, const std::string &expected_revision)
 {
-    std::lock_guard<std::mutex> update_lock(g_config_update_mutex);
+    std::lock_guard update_lock(config_update_mutex());
+    if (!expected_revision.empty() && expected_revision != config_revision_locked())
+        throw std::runtime_error("revision_conflict");
     nlohmann::json candidate_public_json =
         config_handler_serialization::public_config_from_internal_json(jConfig);
     candidate_public_json.merge_patch(j);
@@ -1995,6 +2019,7 @@ void patch_all_from_web(const nlohmann::json &j)
     {
         callback_ini_changed();
     }
+    return config_revision_locked();
 }
 
 void set_patch_all_from_web_runtime_apply_suppressed_for_test(bool suppressed) noexcept
@@ -2006,7 +2031,7 @@ bool persist_rp1_gpclk_route_config(int gpio, std::string *error_message) noexce
 {
     try
     {
-        std::lock_guard<std::mutex> update_lock(g_config_update_mutex);
+        std::lock_guard update_lock(config_update_mutex());
         if (gpio != 4 && gpio != 20)
         {
             if (error_message) *error_message = "RP1 GPCLK route must be GPIO4 or GPIO20.";

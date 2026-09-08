@@ -79,8 +79,8 @@ terminal-record collection. Diagnostics are escaped by the JSON library.
 
 This serializer is an application data boundary, not a new WTP operation or a
 public web endpoint. It has no side effects and is not linked into the production
-application by this slice. A future UI must present unknown, blocked, pending and
-historical states distinctly and avoid reporting ARM as transmitting.
+application by the original slice; subsequent production integration supplies it. The UI presents unknown, blocked, pending and
+historical states distinctly and avoids reporting ARM as transmitting.
 
 ## Explicit recovery
 
@@ -118,8 +118,9 @@ target also checks reports against the pinned Pico endpoint implementation with 
 software clock/engine. See [Slice 7 review](development/wtp-slice7-review.md) for
 commands, findings, repairs and validation boundaries.
 
-Production endpoint/clock/configuration wiring, websocket/UI integration and its
-temporary toggle remain unfinished. No physical USB, timing, RF, installation or
+The [production integration](wtp-production-integration.md) now supplies endpoint,
+clock/configuration and gated UI wiring. [Network integration](wtp-network.md)
+uses the same authority with TLS and shared API status/cancellation. No physical USB, timing, RF, installation or
 service behavior is qualified by these tests. Independent device UTC provision
 remains required; GET_CLOCK cannot set it.
 

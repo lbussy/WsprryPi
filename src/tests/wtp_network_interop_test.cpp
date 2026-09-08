@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Lee Bussy
+#include "wtp_integration/application.hpp"
+#include "wtp_integration/network_http.hpp"
+#include "WTP-Client/include/wtp/frame_parser.hpp"
+#include "json.hpp"
+#include <deque>
+#include <iostream>
+#include <thread>
+using namespace wsprrypi;
+using namespace std::chrono_literals;
+#define CHECK(x) do { if (!(x)) throw std::runtime_error(std::string(#x) + " at " + std::to_string(__LINE__)); } while (false)
+namespace {
+struct Clock : WtpScheduleClock {
+  std::uint64_t now_ms() const override { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+  std::optional<std::uint64_t> utc_now_ns() const override { return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
+  void wait_ms(std::uint64_t ms) override { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
+};
+struct Filter : wtp::ByteStream {
+  TlsStream &tls;
+  Clock &clock;
+  wtp::FrameParser parser;
+  std::deque<std::uint8_t> queued;
+  std::string drop;
+  bool dropped{};
+  Filter(TlsStream &s, Clock &c) : tls(s), clock(c) {}
+  wtp::IoResult write(std::span<const std::uint8_t> bytes) override { return tls.write(bytes.first(std::min<std::size_t>(bytes.size(), 37))); }
+  wtp::IoResult read(std::span<std::uint8_t> bytes) override {
+    if (queued.empty()) {
+      std::array<std::uint8_t, 113> input{};
+      const auto result = tls.read(input);
+      if (result.state != wtp::IoState::Progress) return result;
+      const auto parsed = parser.feed(std::span(input).first(result.count), clock.now_ms());
+      CHECK(parsed.consumed == result.count);
+      for (const auto &event : parsed.events) {
+        CHECK(event.kind == wtp::FrameEventKind::Payload);
+        const auto j = nlohmann::json::parse(event.payload);
+        if (!drop.empty() && j.value("type", "") == "response" && j.value("op", "") == drop) {
+          drop.clear(); dropped = true; close(); return {wtp::IoState::Failed};
+        }
+        const auto frame = wtp::encode_frame(event.payload);
+        queued.insert(queued.end(), frame.begin(), frame.end());
+      }
+    }
+    const auto count = std::min(bytes.size(), queued.size());
+    for (std::size_t i = 0; i < count; ++i) { bytes[i] = queued.front(); queued.pop_front(); }
+    return {count ? wtp::IoState::Progress : wtp::IoState::WouldBlock, count};
+  }
+  void close() noexcept override { tls.close(); parser = {}; queued.clear(); }
+};
+}
+int main(int argc, char **argv) {
+  if (argc != 2) return 2;
+  try {
+    Clock clock;
+    const std::string directory = argv[1];
+    TlsSelection selection{"127.0.0.1", "127.0.0.1", directory + "/client-ca.crt", directory + "/client.crt", directory + "/client.key", 18443};
+    auto credentials = std::make_shared<TlsCredentials>(selection);
+    TlsStream tls([&] { return clock.now_ms(); }, TlsStream::Access::LoopbackTest);
+    Filter stream(tls, clock);
+    const auto open = [&] {
+      stream.close();
+      if (!tls.begin_open(selection, credentials)) return false;
+      while (tls.opening()) { tls.poll_open(); clock.wait_ms(1); }
+      return tls.ready();
+    };
+    // Test the actual shared API including revision and redaction, before WTP
+    // occupies the server's single slot. No parallel management connections.
+    const auto http = [&](const std::string &resource, const std::string &method = "GET", const std::string &body = "", const std::string &revision = "") {
+      return pico_http_request(tls, selection, credentials, [&] { return clock.now_ms(); }, resource, method, body, revision);
+    };
+    auto config = http("config"); CHECK(config.status == 200 && !config.etag.empty());
+    const std::string body = R"({"version":1,"enabled":false,"station":{"callsign":"AA0NT","locator":"EM18","power_dbm":20},"wifi":{"ssid":"test","password":"never-echo-this","ntp_ipv4":"192.0.2.1"},"schedules":[{"period_s":120,"phase_s":0}]})";
+    CHECK(http("config", "PUT", body).status == 428);
+    auto saved = http("config", "PUT", body, config.etag);
+    CHECK(saved.status == 200 && saved.body.find("never-echo-this") == std::string::npos);
+    CHECK(http("config", "PUT", body, config.etag).status == 412);
+    CHECK(http("schedules").status == 200);
+    CHECK(http("network").status == 200);
+    WtpSettings settings;
+    settings.device_id = std::string(32, 'a'); settings.start_uncertainty_ns = 1000000;
+    {
+    WtpApplication app(clock, stream, settings, {std::string(32, '1'), std::string(32, '2'), settings.device_id}, open);
+    CHECK(app.inspect().ok);
+    CHECK(app.status().identity->device_id == settings.device_id);
+    const auto request = [&] {
+      TransmissionRequest r;
+      r.output.backend = BackendKind::WTP; r.mode = TransmissionMode::TONE;
+      r.payload = TonePayload{14097100, 200ms, {}};
+      r.policy.allow_unqualified_frequency = true;
+      return r;
+    };
+    const auto finish = [&] {
+      const auto deadline = clock.now_ms() + 30000;
+      while (clock.now_ms() < deadline) { if (auto r = app.take_completion()) return *r; clock.wait_ms(2); }
+      throw std::runtime_error("application completion deadline");
+    };
+    app.prepare(request()); app.start();
+    auto completed = finish();
+    if (completed.outcome != WtpScheduleOutcome::Complete) std::cerr << completed.error << '\n';
+    CHECK(completed.outcome == WtpScheduleOutcome::Complete && completed.job && completed.job->completed());
+    CHECK(app.replaceable());
+    unsigned management_calls = 0;
+    CHECK(app.idle_management([&] { CHECK(http("network").status == 200); ++management_calls; }));
+    CHECK(management_calls == 1 && app.ready());
+    for (const std::string operation : {"LOAD", "ARM"}) {
+      stream.drop = operation; stream.dropped = false;
+      app.prepare(request()); app.start();
+      CHECK(!app.idle_management([&] { ++management_calls; }));
+      auto result = finish();
+      CHECK(stream.dropped && result.outcome == WtpScheduleOutcome::Blocked);
+      CHECK(!app.replaceable() && !app.ready());
+      const auto recovered = app.recover();
+      if (!recovered.ok) std::cerr << operation << ": " << recovered.error << "\n" << wtp_runtime_status_json(app.status()) << "\n";
+      CHECK(recovered.ok && app.ready());
+      CHECK(app.status().last_report->outcome == WtpScheduleOutcome::Blocked);
+    }
+    stream.drop = "ABORT"; stream.dropped = false;
+    app.prepare(request()); app.start();
+    const auto deadline = clock.now_ms() + 15000;
+    while (clock.now_ms() < deadline) {
+      auto s = app.status(); if (s.remote && s.remote->state == wtp::State::Armed) break;
+      clock.wait_ms(1);
+    }
+    CHECK(!app.stop().ok && stream.dropped && !app.replaceable());
+    CHECK(app.recover().ok && app.replaceable());
+    CHECK(management_calls == 1);
+    }
+    // Portable Session remains the authority across actual authenticated sockets.
+    const auto sid = std::string(32, '3'), owner = std::string(32, '4');
+    wtp::Session session({sid, owner, settings.device_id});
+    const auto pump = [&] {
+      const auto deadline = clock.now_ms() + 20000;
+      while (session.busy() && clock.now_ms() < deadline) {
+        session.poll(clock.now_ms()); clock.wait_ms(1);
+      }
+      CHECK(!session.busy());
+    };
+    const auto connect = [&] {
+      CHECK(open()); CHECK(session.connect(stream, clock.now_ms())); pump();
+    };
+    const auto send = [&](wtp::Operation op, wtp::RequestBody body) {
+      CHECK(session.request(op, std::move(body), clock.now_ms())); pump();
+      const auto result = session.take_result(); CHECK(result); return result->kind;
+    };
+    connect(); CHECK(session.phase() == wtp::SessionPhase::Ready);
+    CHECK(send(wtp::Operation::Claim, wtp::LeaseRequest{owner, 30000}) == wtp::ResultKind::Acknowledged);
+    stream.drop = "LOAD";
+    const auto job = std::string(32, '5');
+    CHECK(send(wtp::Operation::Load, wtp::Job{job, wtp::Mode::Tone, 100000000,
+        {{0, 100000000, true, 14097100000000000ULL}}, {}}) == wtp::ResultKind::Unknown);
+    connect(); CHECK(session.uncertain());
+    CHECK(session.retry_uncertain(clock.now_ms())); pump();
+    CHECK(session.take_result()->kind == wtp::ResultKind::Acknowledged && !session.uncertain());
+    session.disconnect();
+    {
+      WtpApplication foreign(clock, stream, settings,
+          {std::string(32, '6'), std::string(32, '7'), settings.device_id}, open);
+      CHECK(!foreign.inspect().ok && !foreign.ready());
+      CHECK(!foreign.replaceable());
+    }
+    connect(); CHECK(session.owns());
+    CHECK(send(wtp::Operation::Abort, wtp::AbortRequest{job}) == wtp::ResultKind::Acknowledged);
+    CHECK(send(wtp::Operation::Release, wtp::Empty{}) == wtp::ResultKind::Acknowledged);
+    session.disconnect();
+    const auto restart = [](const char *which) {
+      std::cout << "RESTART " << which << std::endl;
+      std::string ready; std::getline(std::cin, ready); CHECK(ready == "READY");
+    };
+    restart("boot"); connect();
+    CHECK(session.phase() == wtp::SessionPhase::IdentityChanged && !session.owns());
+    session.disconnect();
+    restart("device");
+    wtp::Session different({sid, owner, settings.device_id});
+    CHECK(open()); CHECK(different.connect(stream, clock.now_ms()));
+    const auto deadline2 = clock.now_ms() + 15000;
+    while (different.busy() && clock.now_ms() < deadline2) { different.poll(clock.now_ms()); clock.wait_ms(1); }
+    CHECK(different.phase() == wtp::SessionPhase::IdentityChanged && !different.owns());
+    different.disconnect();
+    std::cout << "Actual Pico TLS: shared management, finite application job, partial I/O, lost LOAD/ARM/ABORT same-request replay, foreign ownership, boot/device changes and same-session recovery passed\n";
+  } catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
+}
