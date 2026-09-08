@@ -4,6 +4,8 @@
  */
 
 #include "scheduling.hpp"
+#include "wtp_runtime_bridge.hpp"
+#include "transmitter_runtime_bridge.hpp"
 #include "scheduling_internal.hpp"
 
 #include "gpio_input.hpp"
@@ -85,7 +87,8 @@ void transmitter_cb(WsprTransmissionCallbackEvent event,
             consume_tx_iteration_if_needed();
         }
 
-        assert_transmit_gpio_outputs("transmission start");
+        if (config.transmit_backend != TransmitBackendKind::WTP)
+            assert_transmit_gpio_outputs("transmission start");
 
         // Notify clients of start.
         send_ws_message("transmit", "starting");
@@ -168,6 +171,9 @@ void transmitter_cb(WsprTransmissionCallbackEvent event,
 
     case WsprTransmissionCallbackEvent::COMPLETE:
     {
+        if (config.transmit_backend == TransmitBackendKind::WTP && config.mode == ModeType::WSPR &&
+            (!active_wspr_plan_in_progress || active_wspr_frame_index == 0U))
+            consume_tx_iteration_if_needed();
         const double elapsed = value;
         bool do_config = true;
         const bool deferred_reload_pending =
@@ -631,13 +637,13 @@ bool wspr_loop()
     // configuration.  Quiesce it before any service, scheduler, selector, or
     // automatic-transmit path can run.  This latch is process-lifetime by
     // design: ordinary reloads and toggles cannot clear a hardware-safety
-    // failure; a deliberate process restart reinitializes the backend.
+    // failure; Pico retains its separate explicit reconciliation boundary.
     if (!run_startup_quiesce_gate(config))
     {
-        llog.logS(
-            ERROR,
-            "Startup transmission inhibition latched: ",
-            startup_quiesce_error_state());
+        if (config.transmit_backend == TransmitBackendKind::WTP)
+            llog.logS(ERROR, "Pico startup is not ready; inspect endpoint status and explicitly reconcile before scheduling.");
+        else
+            llog.logS(ERROR, "Startup transmission inhibition latched: ", startup_quiesce_error_state());
     }
 
     if (config.transmit_backend == TransmitBackendKind::RP1_GPCLK)
@@ -894,8 +900,12 @@ bool wspr_loop()
     // -------------------------------------------------------------------------
     {
         std::unique_lock<std::mutex> lk(exitwspr_mtx);
-        exitwspr_cv.wait(lk, []
-                         { return exitwspr_ready; });
+        while (!exitwspr_ready) {
+            exitwspr_cv.wait_for(lk, std::chrono::milliseconds(100));
+            lk.unlock();
+            transmitter_poll_events();
+            lk.lock();
+        }
     }
 
     llog.logS(DEBUG, "WSPR loop termination started.");

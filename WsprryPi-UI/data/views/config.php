@@ -734,6 +734,8 @@ $bandGpioBands = ['2200m', '630m', '160m', '80m', '60m', '40m', '30m', '20m', '1
                                 </div>
                                 <div id="backendStatus" class="alert mt-3 mb-0" role="alert" aria-live="assertive" aria-atomic="true" hidden></div>
 
+                                <?php require __DIR__ . '/wtp-controls.php'; ?>
+
                                 <div class="transmitter-backend-fields" id="gpio-backend-panel" role="group" aria-labelledby="gpio-output-heading">
 
                                 <h3 id="gpio-output-heading" class="transmitter-backend-fields__title">GPIO output</h3>

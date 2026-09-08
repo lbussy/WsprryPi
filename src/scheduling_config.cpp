@@ -13,6 +13,8 @@
 #include "ppm_manager.hpp"
 #include "runtime_config_bridge.hpp"
 #include "wspr_transmit.hpp"
+#include "transmitter_runtime_bridge.hpp"
+#include "wtp_runtime_bridge.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -50,8 +52,8 @@ bool set_config(bool force)
         const bool ppm_update_requested =
             ppm_reload_pending.load(std::memory_order_acquire);
 
-        if (transmitter_reload_should_defer() &&
-            (managed_candidate_requested || ppm_update_requested))
+        if ((managed_candidate_requested || ppm_update_requested) &&
+            (wtp_runtime_selected() ? wtp_runtime_invalidate_for_reload() : transmitter_reload_should_defer()))
         {
             if (managed_candidate_requested)
             {
@@ -111,9 +113,9 @@ bool set_config(bool force)
                     true,
                     "Transmit is blocked until a valid configuration is loaded.");
 
-                if (wsprTransmitter.getState() != WsprTransmitter::State::TRANSMITTING)
+                if (transmitter_state() != WsprTransmitter::State::TRANSMITTING)
                 {
-                    wsprTransmitter.stopAndJoin();
+                    transmitter_stop_and_join();
                     deassert_transmit_gpio_outputs(
                         &config,
                         false,
@@ -157,7 +159,7 @@ bool set_config(bool force)
                 set_managed_reload_tx_inhibited(
                     true,
                     backend_runtime_error);
-                wsprTransmitter.stopAndJoin();
+                transmitter_stop_and_join();
                 deassert_transmit_gpio_outputs(
                     &config,
                     false,
@@ -227,10 +229,10 @@ bool set_config(bool force)
                         "reload_failed",
                         correction_error);
                     set_managed_reload_tx_inhibited(true, correction_error);
-                    if (wsprTransmitter.getState() !=
+                    if (transmitter_state() !=
                         WsprTransmitter::State::TRANSMITTING)
                     {
-                        wsprTransmitter.stopAndJoin();
+                        transmitter_stop_and_join();
                         deassert_transmit_gpio_outputs(
                             &config,
                             false,
@@ -309,7 +311,7 @@ bool set_config(bool force)
                 set_managed_reload_tx_inhibited(
                     true,
                     selector_gpio_error);
-                wsprTransmitter.stopAndJoin();
+                transmitter_stop_and_join();
                 deassert_transmit_gpio_outputs(
                     &config,
                     false,
@@ -350,7 +352,7 @@ bool set_config(bool force)
                     set_managed_reload_tx_inhibited(
                         true,
                         policy_error);
-                    wsprTransmitter.stopAndJoin();
+                    transmitter_stop_and_join();
                     deassert_transmit_gpio_outputs(
                         &config,
                         false,
@@ -405,7 +407,7 @@ bool set_config(bool force)
                 ppm_reload_pending.store(false, std::memory_order_relaxed);
             }
 
-            wsprTransmitter.stopAndJoin();
+            transmitter_stop_and_join();
             deassert_transmit_gpio_outputs(
                 &config,
                 false,
@@ -612,7 +614,7 @@ bool set_config(bool force)
                     ppm_reload_pending.store(false, std::memory_order_relaxed);
                 }
 
-                wsprTransmitter.stopAndJoin();
+                transmitter_stop_and_join();
                 deassert_transmit_gpio_outputs(
                     &config,
                     false,
@@ -726,7 +728,7 @@ bool set_config(bool force)
                             "configuration",
                             "reload_failed",
                             "Managed reload planning failed; previous valid configuration remains loaded. Transmit is blocked until a valid configuration is loaded.");
-                        wsprTransmitter.stopAndJoin();
+                        transmitter_stop_and_join();
                         deassert_transmit_gpio_outputs(
                             &config,
                             false,
@@ -749,7 +751,7 @@ bool set_config(bool force)
                 if (!runtime_transmit_enabled(working_config))
                 {
                     log_transmit_disabled_skip(working_config);
-                    wsprTransmitter.stopAndJoin();
+                    transmitter_stop_and_join();
                     deassert_transmit_gpio_outputs(
                         &config,
                         false,
@@ -906,7 +908,7 @@ bool set_config(bool force)
                 llog.logS(DEBUG, "Setup complete.");
             }
             llog.logS(INFO, "Waiting for next transmission window.");
-            wsprTransmitter.startAsync();
+            transmitter_start_async();
         }
 #ifdef DEBUG_WSPR_TRANSMIT
         wsprTransmitter.dumpParameters();

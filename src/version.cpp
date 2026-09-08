@@ -182,7 +182,7 @@ constexpr std::string_view BUILD_DIRTY = to_string_view(MAKE_DIRTY); ///< Build-
 
 std::string get_compiled_backends()
 {
-    return WSPRRYPI_COMPILED_BACKENDS;
+    return std::string(WSPRRYPI_COMPILED_BACKENDS) + ",wtp";
 }
 
 bool has_ancillary_gpio() noexcept

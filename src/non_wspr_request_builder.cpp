@@ -21,6 +21,8 @@ namespace
 wsprrypi::BackendKind to_controller_backend(
     TransmitBackendKind backend) noexcept
 {
+    if (backend == TransmitBackendKind::WTP)
+        return wsprrypi::BackendKind::WTP;
     if (backend == TransmitBackendKind::SI5351)
         return wsprrypi::BackendKind::SI5351;
     if (backend == TransmitBackendKind::SIMULATED)
@@ -32,6 +34,8 @@ wsprrypi::BackendKind to_controller_backend(
 wsprrypi::ClockSource to_controller_clock_source(
     const ArgParserConfig &cfg) noexcept
 {
+    if (cfg.transmit_backend == TransmitBackendKind::WTP)
+        return wsprrypi::ClockSource::UNSPECIFIED;
     if (cfg.transmit_backend != TransmitBackendKind::SI5351)
         return wsprrypi::ClockSource::GPIO_CLK;
 
@@ -61,7 +65,7 @@ wsprrypi::HardwareProfile to_controller_profile(
 {
     if (backend == TransmitBackendKind::SI5351)
         return wsprrypi::HardwareProfile::SI5351;
-    if (backend == TransmitBackendKind::SIMULATED)
+    if (backend == TransmitBackendKind::SIMULATED || backend == TransmitBackendKind::WTP)
         return wsprrypi::HardwareProfile::UNSPECIFIED;
     if (backend == TransmitBackendKind::RP1_GPCLK)
         return wsprrypi::HardwareProfile::RP1_GPCLK;

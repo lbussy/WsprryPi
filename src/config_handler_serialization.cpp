@@ -3,6 +3,7 @@
  * @brief Serializes accepted runtime configuration into its JSON model.
  */
 
+#include "wtp_settings_json.hpp"
 #include "config_handler.hpp"
 #include "config_handler_serialization.hpp"
 #include "arg_parser.hpp"
@@ -32,6 +33,7 @@ void serialize_runtime_config_to_json(
     target["Operation"]["Mode"] = config_serialization_mode_name(
         source.mode == ModeType::TONE ? ModeType::WSPR : source.mode);
     target["Operation"]["Transmit"] = source.transmit;
+    target["WTP"] = wtp_settings_json(source.wtp);
     if (source.transmit_backend != TransmitBackendKind::SIMULATED)
         target["Operation"]["Transmit Backend"] =
             transmit_backend_kind_to_string(source.transmit_backend);
@@ -203,6 +205,7 @@ nlohmann::json public_config_from_internal_json(const nlohmann::json &source)
     }
 
     nlohmann::json public_json;
+    public_json["WTP"] = source.value("WTP", wtp_settings_json(WtpSettings{}));
     public_json["Operation"] = source.at("Operation");
     public_json["GPIO"] = source.at("GPIO");
     public_json["Calibration"] = source.at("Calibration");
@@ -250,6 +253,15 @@ void apply_public_config_to_internal_json(
     const nlohmann::json &public_json,
     nlohmann::json &internal_json)
 {
+    if (public_json.contains("WTP")) {
+        if (!public_json.at("WTP").is_object())
+            throw std::runtime_error("WTP settings must be an object.");
+        for (const auto &item : public_json.at("WTP").items()) {
+            if (!wtp_settings_json(WtpSettings{}).contains(item.key()))
+                throw std::runtime_error("Unknown WTP setting: " + item.key());
+            internal_json["WTP"][item.key()] = item.value();
+        }
+    }
     if (public_json.contains("Meta"))
     {
         const auto &meta = public_json.at("Meta");

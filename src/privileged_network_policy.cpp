@@ -98,7 +98,7 @@ PrivilegedOperationClass classify_privileged_http_operation(
     if (method == "POST" &&
         (path == "/config/repair" || path == "/control/stop" ||
          path == "/api/network-safety" ||
-         path == "/api/rp1-gpclk-route")) {
+         path == "/api/rp1-gpclk-route" || path == "/api/wtp/recover")) {
         return PrivilegedOperationClass::protected_operation;
     }
     if (method == "GET" &&
@@ -110,7 +110,7 @@ PrivilegedOperationClass classify_privileged_http_operation(
     if (method == "GET" && path == "/api/network-safety") {
         return PrivilegedOperationClass::read_only;
     }
-    if (method == "GET" && path == "/api/rp1-gpclk-route") {
+    if (method == "GET" && (path == "/api/rp1-gpclk-route" || path == "/api/wtp")) {
         return PrivilegedOperationClass::read_only;
     }
     return PrivilegedOperationClass::reject;

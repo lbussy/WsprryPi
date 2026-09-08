@@ -571,6 +571,15 @@ const configSchema = {
             "Si5351 Detection Error": { required: false, type: "string" }
         }
     },
+    WTP: { required: false, keys: {
+        "Endpoint": { required: false, type: "string" },
+        "USB Serial": { required: false, type: "string" },
+        "Device ID": { required: false, type: "string" },
+        "USB Vendor ID": { required: false, type: "number" },
+        "USB Product ID": { required: false, type: "number" },
+        "Start Uncertainty ns": { required: false, type: "number" },
+        "Allow Frequency Adjustment": { required: false, type: "boolean" }
+    } },
     Si5351: {
         required: false,
         keys: {
@@ -1691,7 +1700,7 @@ function populateConfig(callback = null) {
                         "gpio"
                     ) || "gpio"
                 ).toLowerCase();
-                if (!["gpio", "rp1-gpclk", "si5351"].includes(transmitBackend)) {
+                if (!["gpio", "rp1-gpclk", "si5351", "wtp"].includes(transmitBackend)) {
                     transmitBackend = "gpio";
                 }
                 let enableOnBoot = String(
@@ -1936,6 +1945,7 @@ function populateConfig(callback = null) {
                         renderBandPreferenceRows();
                     }
                     if (typeof setTransmitBackendSelection === "function") {
+                        window.WtpUi?.populate(configJson.WTP);
                         setTransmitBackendSelection(transmitBackend, true);
                     } else {
                         $("#transmit_backend")
@@ -3111,7 +3121,7 @@ function renderGpioFrequencyCorrection(status) {
     if (!panelNode || !valueNode || !detailNode || !status) {
         return;
     }
-    panelNode.hidden = status.transmitBackend === "si5351";
+    panelNode.hidden = ["si5351", "wtp"].includes(status.transmitBackend);
     if (panelNode.hidden) {
         return;
     }

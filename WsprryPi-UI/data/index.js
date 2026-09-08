@@ -443,6 +443,7 @@ function restorePersistedConfigDraft() {
         ? { ...wspr["Band Preferences"] }
         : {};
     renderBandPreferenceRows();
+    window.WtpUi?.populate(payload.WTP);
     setTransmitBackendSelection(operation["Transmit Backend"], true);
     if (typeof updateBackendPlatformSupportUi === "function") {
         updateBackendPlatformSupportUi();
@@ -729,7 +730,7 @@ function bindIndexActions() {
 
     $("#wsprform").on(
         "change input",
-        'input:not(#transmit, [name="mode_toggle"], [name="qrss_type"]), select:not(#tx_pin), textarea',
+        'input:not(#transmit, #wtp_visible, [name="mode_toggle"], [name="qrss_type"]), select:not(#tx_pin), textarea',
         scheduleAutosave
     );
 
@@ -1890,10 +1891,12 @@ function updateRuntimeControlStatusFromForm(mode) {
 }
 
 function selectedTransmitBackend() {
+    if (window.WtpUi?.selected()) return "wtp";
     return $("#transmit_backend").is(":checked") ? "si5351" : "gpio";
 }
 
 function setTransmitBackendSelection(backend, triggerChange = false) {
+    window.WtpUi?.select(String(backend).toLowerCase() === "wtp");
     const $backend = $("#transmit_backend");
     $backend.prop("checked", transmitBackendForUi(backend) === "si5351");
     if (triggerChange) {
@@ -2096,6 +2099,7 @@ function si5351UnavailableMessage() {
 }
 
 function selectedBackendUnavailableMessage() {
+    if (window.WtpUi?.selected()) return window.WtpUi.unavailable();
     const platform = window.WSPRRYPI_PLATFORM || {};
     const backend = selectedTransmitBackend();
 
@@ -2147,6 +2151,7 @@ function si5351UiSupported() {
 }
 
 function resolveSupportedTransmitBackend(preferredBackend = null) {
+    if (preferredBackend === "wtp") return "wtp";
     const platform = window.WSPRRYPI_PLATFORM || {};
     const preferred = preferredBackend === "si5351" ? "si5351" : "gpio";
     const gpioSupported = platform.gpioClockTransmissionSupported !== false;
@@ -2173,6 +2178,7 @@ function resolveSupportedTransmitBackend(preferredBackend = null) {
 }
 
 function hasAnySupportedTransmitBackend() {
+    if (window.WtpUi?.selected()) return true;
     const platform = window.WSPRRYPI_PLATFORM || {};
     return (
         platform.gpioClockTransmissionSupported !== false ||
@@ -2325,8 +2331,9 @@ function updateBackendPlatformSupportUi() {
             ? backendInlineHintMessage()
             : noBackendAvailableMessage());
 
-    $backend.prop("disabled", !anyBackendSupported);
+    $backend.prop("disabled", currentBackend === "wtp" || !anyBackendSupported);
     $selectorHint.text(
+        currentBackend === "wtp" ? "Pico is selected below. Turn off Use Pico over USB to choose GPIO or Si5351." :
         rp1RouteSelectable && !gpioSupported
             ? rp1RouteSelectorHint()
             : isRp1GpioPlatform() && !rp1GpioOperatorVisible()
@@ -2352,7 +2359,7 @@ function updateBackendPlatformSupportUi() {
 }
 
 function syncCalibrationControls() {
-    const si5351Active = selectedTransmitBackend() === "si5351";
+    const si5351Active = selectedTransmitBackend() !== "gpio";
     const estimateEnabled = $("#use_system_clock_frequency_estimate").is(":checked");
     const $residual = $("#gpio_frequency_residual_ppm");
     $residual.prop("disabled", si5351Active || !estimateEnabled);
@@ -2400,7 +2407,7 @@ function clickTransmitBackend() {
         .prop("disabled", !gpioActive);
     $si5351Panel
         .find("input, select, button")
-        .prop("disabled", gpioActive);
+        .prop("disabled", backend !== "si5351");
 
     syncBackendControlAvailability();
 
@@ -4125,6 +4132,7 @@ function populateI2cBuses(savedBus) {
 }
 
 function validateTransmitterHardwareFields() {
+    const wtpValid = window.WtpUi?.validate() ?? true;
     const backend = selectedTransmitBackend();
     const gpioOperatorActive = gpioBackendOperatorActive();
     let invalidCount = 0;
@@ -4235,7 +4243,7 @@ function validateTransmitterHardwareFields() {
         }
     }
 
-    return invalidCount === 0;
+    return invalidCount === 0 && wtpValid;
 }
 
 function setLEDPin(gpioNumber) {
@@ -4326,7 +4334,7 @@ function buildConfigPayload(options = {}) {
     const amp_pin_active_high = parseBool($("#amp_active_high").is(":checked"));
     let band_gpio = collectBandGpioConfig();
     let transmit_backend = transmitBackendForPersistence();
-    if (!["gpio", "rp1-gpclk", "si5351"].includes(transmit_backend)) {
+    if (!["gpio", "rp1-gpclk", "si5351", "wtp"].includes(transmit_backend)) {
         transmit_backend = isRp1GpioPlatform() && rp1GpioOperatorVisible()
             ? "rp1-gpclk"
             : "gpio";
@@ -4500,6 +4508,7 @@ function buildConfigPayload(options = {}) {
         Operation,
         GPIO,
         Si5351,
+        ...(window.WtpUi ? { WTP: window.WtpUi.read() } : {}),
         Calibration,
         WSPR,
         CW,

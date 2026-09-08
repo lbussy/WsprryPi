@@ -652,6 +652,7 @@ static TransmitBackendKind parse_transmit_backend_option(
             return static_cast<char>(std::tolower(c));
         });
 
+    if (lowered == "wtp") return TransmitBackendKind::WTP;
     if (lowered == "gpio")
     {
         if (require_compiled &&
@@ -689,7 +690,7 @@ static TransmitBackendKind parse_transmit_backend_option(
     }
 
     throw std::invalid_argument(
-        "Invalid backend. Expected 'gpio', 'rp1-gpclk', 'si5351', or 'simulated'.");
+        "Invalid backend. Expected 'gpio', 'rp1-gpclk', 'si5351', 'wtp', or 'simulated'.");
 }
 
 static int parse_integer_option(
@@ -1462,6 +1463,21 @@ bool validate_config_candidate(
         return false;
     }
 
+    try {
+        validate_wtp_settings(candidate.wtp, candidate.transmit_backend == TransmitBackendKind::WTP);
+        if (candidate.transmit_backend == TransmitBackendKind::WTP &&
+            (candidate.use_led || candidate.use_amp || candidate.use_shutdown || candidate.frequencies.find('@') != std::string::npos ||
+             std::any_of(candidate.band_gpio.begin(), candidate.band_gpio.end(),
+                         [](const BandGPIOConfig &entry) { return entry.enabled; })))
+            throw std::runtime_error("Pico WTP requires TX LED, amplifier, shutdown-button and band GPIO controls disabled.");
+        if (candidate.transmit_backend == TransmitBackendKind::WTP &&
+            (candidate.cw_fade_shape != "none" || candidate.cw_fade_in_ms || candidate.cw_fade_out_ms))
+            throw std::runtime_error("Pico WTP does not support envelope shaping or fades.");
+    } catch (const std::exception &e) {
+        if (error_message) *error_message = e.what();
+        return false;
+    }
+
     if (!has_ancillary_gpio())
     {
         const bool band_gpio_requested = std::any_of(
@@ -1991,6 +2007,16 @@ bool validate_config_data()
             validation_error_is_missing_required(validation_error)
                 ? "Missing required parameters."
                 : "Invalid configuration.");
+
+        if (config.transmit_backend == TransmitBackendKind::WTP)
+        {
+            // WTP validation can stop before legacy derived fields are populated.
+            // Preserve the actual endpoint/admission failure instead of reporting
+            // an unrelated empty derived frequency list.
+            llog.logE(ERROR, " - ", validation_error);
+            if (config.use_ini) return false;
+            std::exit(EXIT_FAILURE);
+        }
 
         if (validation_error_is_capability_failure(validation_error))
         {

@@ -31,6 +31,7 @@ namespace
 wsprrypi::BackendKind to_controller_backend(
     TransmitBackendKind backend) noexcept
 {
+    if (backend == TransmitBackendKind::WTP) return wsprrypi::BackendKind::WTP;
     if (backend == TransmitBackendKind::SI5351)
         return wsprrypi::BackendKind::SI5351;
     if (backend == TransmitBackendKind::SIMULATED)
@@ -58,7 +59,7 @@ wsprrypi::HardwareProfile to_controller_profile(
 {
     if (backend == TransmitBackendKind::SI5351)
         return wsprrypi::HardwareProfile::SI5351;
-    if (backend == TransmitBackendKind::SIMULATED)
+    if (backend == TransmitBackendKind::SIMULATED || backend == TransmitBackendKind::WTP)
         return wsprrypi::HardwareProfile::UNSPECIFIED;
     if (backend == TransmitBackendKind::RP1_GPCLK)
         return wsprrypi::HardwareProfile::RP1_GPCLK;
@@ -120,6 +121,11 @@ TestToneStartResult start_test_tone(const TestToneRequest &tone_request)
 {
     TestToneStartResult result;
     result.source = tone_request.source;
+    if (config.transmit_backend == TransmitBackendKind::WTP &&
+        (!tone_request.duration || *tone_request.duration <= std::chrono::nanoseconds::zero())) {
+        result.message = "Pico requires a finite tone duration; continuous Test Tone is unavailable.";
+        return result;
+    }
 
     if (web_test_tone.load())
     {

@@ -36,6 +36,10 @@ int main() {
     }
     expect_http("POST", "/config/repair", Classification::protected_operation);
     expect_http("POST", "/control/stop", Classification::protected_operation);
+    expect_http("POST", "/api/wtp/recover", Classification::protected_operation);
+    expect_http("GET", "/api/wtp", Classification::read_only);
+    expect_http("GET", "/api/wtp/recover", Classification::reject);
+    expect_http("PUT", "/api/wtp", Classification::reject);
     expect_http("POST", "/api/network-safety", Classification::protected_operation);
     expect_http("GET", "/api/network-safety", Classification::read_only);
     expect_http("PUT", "/api/network-safety", Classification::reject);

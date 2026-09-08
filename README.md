@@ -39,6 +39,20 @@ building, explicit selection, deterministic virtual-time traces, bounded
 real-time tests, fault injection, repeated execution, Debian CI, and the limits
 of simulation evidence.
 
+The [WTP-Client component](src/WTP-Client/README.md) provides the portable WTP/1
+wire and session foundation for Phase 10 Pico integration. The parent
+[execution-plan converter](docs/wtp-execution-plan.md) prepares complete finite
+WTP jobs, and the [USB CDC adapter](docs/wtp-usb-cdc.md) provides the Linux host
+transport. The [complete-plan backend](docs/wtp-backend.md) now composes these
+layers through the shared transmitter controller, with hardware-free tests.
+The [early scheduler](docs/wtp-scheduling.md) freezes complete requests and hands
+off their exact UTC starts before the RF boundary. Its [status and recovery
+boundary](docs/wtp-status-recovery.md) publishes coherent observations and retains
+explicit recovery results. [Production integration](docs/wtp-production-integration.md)
+adds persisted endpoint selection, an owned runtime worker and explicit status/
+recovery controls behind a default-off UI development toggle. Physical USB,
+target operation and RF qualification remain outstanding.
+
 For containerized ARMv6 and AArch64 builds targeting Raspberry Pi OS Bookworm
 and Trixie, including 32-bit Pi 1/A+ and Pi Zero support, see the
 [container build guide](docs/container-builds.md). For installing those artifacts,

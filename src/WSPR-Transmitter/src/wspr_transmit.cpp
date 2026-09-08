@@ -101,6 +101,8 @@ namespace
             return "RP1 GPCLK";
         case wsprrypi::BackendKind::SI5351:
             return "SI5351";
+        case wsprrypi::BackendKind::WTP:
+            return "WTP";
         case wsprrypi::BackendKind::SIMULATED:
             return "simulated";
         }
@@ -155,6 +157,8 @@ namespace
             return WSPRRYPI_BACKEND_RP1_GPCLK;
         case wsprrypi::BackendKind::SI5351:
             return WSPRRYPI_BACKEND_SI5351;
+        case wsprrypi::BackendKind::WTP:
+            return false; // Early scheduling and production selection are not integrated.
         case wsprrypi::BackendKind::SIMULATED:
             return WSPRRYPI_BACKEND_SIMULATED;
         }
@@ -524,6 +528,8 @@ std::unique_ptr<wsprrypi::ITransmissionBackend> WsprTransmitter::createBackend(
             break;
 #endif
         }
+        case wsprrypi::BackendKind::WTP:
+            break; // Explicit parent construction only until early scheduler integration.
         case wsprrypi::BackendKind::SIMULATED:
         {
 #if WSPRRYPI_BACKEND_SIMULATED

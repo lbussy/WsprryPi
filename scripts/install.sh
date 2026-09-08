@@ -9161,6 +9161,9 @@ install_wsprrypi_proxy_block() {
     ProxyPass        /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/rp1-gpclk-route
     ProxyPassReverse /wsprrypi/api/rp1-gpclk-route http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/rp1-gpclk-route
 
+    ProxyPass        /wsprrypi/api/wtp http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/wtp
+    ProxyPassReverse /wsprrypi/api/wtp http://127.0.0.1:${WSPRRYPI_WEB_PORT}/api/wtp
+
     Include /usr/local/etc/wsprrypi-apache-network-policy.conf
 
     # WebSocket (port ${WSPRRYPI_SOCKET_PORT})

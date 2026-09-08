@@ -14,6 +14,7 @@
 #include "scheduling.hpp"
 #include "system_clock_frequency_estimate.hpp"
 #include "wspr_transmit.hpp"
+#include "wtp_runtime_bridge.hpp"
 
 #include <iomanip>
 #include <sched.h>
@@ -42,8 +43,16 @@ void apply_runtime_config_side_effects()
     si5351_config.tx_output = config.si5351_tx_output;
     si5351_config.power_level = config.power_level;
     si5351_config.app_managed = config.use_ini;
-    wsprTransmitter.selectBackend(backend_kind, si5351_config);
-    wsprTransmitter.setTransmitNow(backend_kind == wsprrypi::BackendKind::SIMULATED);
+    if (config.transmit_backend == TransmitBackendKind::WTP) {
+        if (!wtp_runtime_selected()) wsprTransmitter.shutdownForProcessExit();
+        select_wtp_runtime(config.wtp);
+        if (!wtp_runtime_ready()) (void)wtp_runtime_inspect();
+    } else {
+        select_wtp_runtime(std::nullopt);
+        wsprTransmitter.selectBackend(backend_kind, si5351_config);
+    }
+    if (config.transmit_backend != TransmitBackendKind::WTP)
+        wsprTransmitter.setTransmitNow(backend_kind == wsprrypi::BackendKind::SIMULATED);
 
     llog.logS(INFO,
               "Transmit backend: ",
@@ -86,7 +95,7 @@ void apply_runtime_config_side_effects()
                 " held in a safe non-transmitting state; internal PLL remains parked.");
         }
     }
-    else
+    else if (config.transmit_backend != TransmitBackendKind::WTP)
     {
         llog.logS(INFO, "Transmit GPIO: ", config.tx_pin);
     }
@@ -98,7 +107,7 @@ void apply_runtime_config_side_effects()
                                    std::setprecision(2),
                                    config.ppm);
     }
-    else if (!config.use_system_clock_frequency_estimate && config.ppm == 0.0)
+    else if (config.transmit_backend != TransmitBackendKind::WTP && !config.use_system_clock_frequency_estimate && config.ppm == 0.0)
     {
         log_startup_config_message(WARN, "System-clock frequency estimate disabled and manual GPIO PPM is zero.");
     }

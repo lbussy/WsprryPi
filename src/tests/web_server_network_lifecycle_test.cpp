@@ -64,6 +64,23 @@ public:
             assert(!response->has_header("Access-Control-Allow-Origin"));
         };
 
+        // Production Pico routes: reads are snapshots and unselected recovery cannot open USB.
+        {
+            httplib::Client client("127.0.0.1", port);
+            httplib::Headers headers{{"Host", "wsprrypi"}};
+            auto observation = client.Get("/api/wtp", headers);
+            assert(observation && observation->status == 200 && observation->body == "{\"selected\":false}");
+            assert(observation->get_header_value("Cache-Control") == "no-store");
+            for (const auto &body : {"{}", "[]", "{\"operation\":\"resume\"}", "{\"operation\":\"reconcile\",\"operation\":\"reconcile\"}"}) {
+                auto response = client.Post("/api/wtp/recover", headers, body, "application/json");
+                assert(response && response->status == 400);
+            }
+            auto response = client.Post("/api/wtp/recover", headers, "{\"operation\":\"reconcile\"}", "application/json");
+            assert(response && response->status == 409);
+            response = client.Post("/api/wtp/recover", headers, "{\"operation\":\"reconcile\"}", "application/jsonx");
+            assert(response && response->status == 400);
+        }
+
         // The same listener remains live while current authorization changes.
         require_status("192.168.50.42", 403);
         require_status("", 404);  // Legitimate loopback operation.

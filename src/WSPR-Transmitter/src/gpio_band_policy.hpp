@@ -59,6 +59,9 @@ inline QualificationState qualification_for(
     if (backend == BackendKind::SIMULATED)
         return QualificationState::QUALIFIED;
 
+    if (backend == BackendKind::WTP)
+        return QualificationState::UNTESTED; // CAPS is not RF qualification.
+
     if (backend == BackendKind::SI5351)
     {
         if (band == "1.25m" || band == "70cm")

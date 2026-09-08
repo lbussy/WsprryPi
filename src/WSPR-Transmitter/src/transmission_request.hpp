@@ -16,7 +16,8 @@ enum class BackendKind
     RPI_CLOCK_GPIO,
     RP1_GPCLK,
     SI5351,
-    SIMULATED
+    SIMULATED,
+    WTP // Explicit complete-plan construction; production selection is deferred.
 };
 
 enum class ClockSource

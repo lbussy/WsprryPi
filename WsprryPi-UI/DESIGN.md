@@ -170,6 +170,8 @@ Fixed navigation and footer frame a single responsive page shell. A centered Boo
 
 At narrow widths, navigation stacks, toolbars wrap, and controls expand when touch use benefits. Wide technical tables retain readable columns inside explicit horizontal scrollers instead of wrapping by character or forcing page overflow. Long identifiers and messages wrap safely where scrolling is not intended.
 
+Observation lists pair labels and wrap-safe values in columns on wide screens, then stack each label above its value on narrow screens. Keep related status and recovery controls in the same flat section.
+
 **The One-Shell Rule.** Keep one dominant page card; use spacing, borders, and tonal panels for interior hierarchy.
 
 **The Responsive Truth Rule.** Mobile may stack or scroll, but it must preserve every operational distinction and behavior.
@@ -224,6 +226,7 @@ Borders are structural and complete. Avoid decorative side stripes, arbitrary cl
 - **Style:** Familiar Bootstrap controls with room for validation and technical values.
 - **Focus:** Shared slate-derived ring.
 - **Error / Disabled:** Validation beneath its field, preserved drafts, wrap-safe values, and unmistakable disabled state.
+- **Progressive Disclosure:** Keep visibility controls separate from output selection. When settings are hidden, retain their selection and show a nearby explanation when it remains active.
 
 ### Navigation
 
@@ -237,6 +240,7 @@ Borders are structural and complete. Avoid decorative side stripes, arbitrary cl
 - **Panels:** Grid structure, uppercase scan labels, semibold values, neutral tint, borders, and wrap-safe content.
 - **Tables:** Compact readable type, sticky headings where useful, and horizontal scrolling when technical columns must remain legible.
 - **Stateful Content:** Expose loading with `aria-busy`, keep recovery nearby, and distinguish empty results from failed requests.
+- **Observations:** Label historical output with its observation age. Unavailable evidence remains explicitly unknown; place recovery progress and results beside the recovery action with polite status announcements.
 
 ## Do's and Don'ts
 

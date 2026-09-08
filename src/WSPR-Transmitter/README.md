@@ -14,6 +14,17 @@ the kernel. GPIO4 and GPIO20 are independent routes. The root-owned, mode-0600
 endpoint is the production authority. The provider's package version or build
 label is not an application allowlist.
 
+### Parent WTP backend integration
+
+`BackendKind::WTP` identifies the parent's explicitly constructed complete-plan
+backend. The shared frequency policy treats it as untested; advertised CAPS do
+not establish RF qualification. The production `WsprTransmitter` factory refuses
+WTP pending production selection and operator integration. The parent now has a
+dedicated [early WTP scheduler](../../docs/wtp-scheduling.md) with
+[status and recovery reporting](../../docs/wtp-status-recovery.md).
+Parent lifecycle, tests and limitations are documented in [the WTP backend guide](../../docs/wtp-backend.md).
+No WTP-Client or USB dependency is introduced into this reusable component.
+
 ### Shared chipset clock offsets
 
 The reusable `../Chipset-Offsets` component owns the single intrinsic offset
