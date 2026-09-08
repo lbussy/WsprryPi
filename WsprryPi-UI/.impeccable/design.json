@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-03T12:28:02Z",
+  "generatedAt": "2026-09-08T14:53:08.018Z",
   "title": "Design System: Wsprry Pi Console",
   "extensions": {
     "colorMeta": {
@@ -38,7 +38,7 @@
     ],
     "motion": [
       { "name": "fast-control", "value": "120ms ease-in-out", "purpose": "Compact control feedback." },
-      { "name": "standard-state", "value": "180ms ease", "purpose": "Color, border, background, and shadow changes." },
+      { "name": "standard-state", "value": "180ms ease", "purpose": "Opacity changes for pending state feedback." },
       { "name": "connection-alert", "value": "300ms ease-in-out", "purpose": "Banner opacity and transform." }
     ],
     "breakpoints": [
@@ -54,36 +54,36 @@
       "name": "Primary Button", "kind": "button", "refersTo": "button-primary",
       "description": "Ordinary high-emphasis action using Zephyr primary.",
       "html": "<button class=\"ds-btn-primary\" type=\"button\">Save changes</button>",
-      "css": ".ds-btn-primary { padding: .5rem 1rem; color: #fff; background: #3459e6; border: 1px solid #3459e6; border-radius: .375rem; font: 600 1rem/1.5 'Source Sans 3', 'Segoe UI', sans-serif; transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease; } .ds-btn-primary:hover { background: #2a47b8; border-color: #2a47b8; } .ds-btn-primary:focus-visible { outline: 0; box-shadow: 0 0 0 .2rem rgba(107,128,150,.22); }"
+      "css": ".ds-btn-primary { padding: .5rem 1rem; color: #fff; background: var(--bs-primary, #3459e6); border: 1px solid var(--bs-primary, #3459e6); border-radius: var(--bs-border-radius, .375rem); font: 500 .875rem/1.5 var(--font-body, \"Source Sans 3\", \"Segoe UI\", sans-serif); cursor: pointer; transition: background-color .15s ease-in-out, border-color .15s ease-in-out, box-shadow .15s ease-in-out; } .ds-btn-primary:hover { background: #2c4cc4; border-color: #2a47b8; } .ds-btn-primary:active { background: #2a47b8; border-color: #2743ad; } .ds-btn-primary:focus-visible { outline: 0; box-shadow: var(--focus-ring, 0 0 0 .2rem rgba(107,128,150,.22)); } .ds-btn-primary:disabled { pointer-events: none; opacity: .65; }"
     },
     {
       "name": "Text Field", "kind": "input",
       "description": "Familiar bordered field for station and configuration values.",
       "html": "<label class=\"ds-field-label\" for=\"ds-callsign\">Callsign</label><input class=\"ds-field\" id=\"ds-callsign\" value=\"AA0NT\">",
-      "css": ".ds-field-label { display: block; margin-bottom: .35rem; color: #495057; font: 700 .75rem/1.3 'Barlow Semi Condensed', 'Segoe UI', sans-serif; letter-spacing: .08em; text-transform: uppercase; } .ds-field { width: 16rem; max-width: 100%; padding: .5rem .75rem; color: #495057; background: #fff; border: 1px solid #dee2e6; border-radius: .375rem; font: 400 1rem/1.5 'Source Sans 3', 'Segoe UI', sans-serif; } .ds-field:focus-visible { outline: 0; border-color: #6b8096; box-shadow: 0 0 0 .2rem rgba(107,128,150,.22); }"
+      "css": ".ds-field-label { display: block; margin-bottom: .5rem; color: var(--bs-body-color, #495057); font: 500 1rem/1.55 var(--font-body, \"Source Sans 3\", \"Segoe UI\", sans-serif); } .ds-field { width: min(16rem, 100%); box-sizing: border-box; padding: .5rem 1rem; color: var(--bs-body-color, #495057); background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #dee2e6); border-radius: var(--bs-border-radius, .375rem); font: 400 .875rem/1.5 var(--font-body, \"Source Sans 3\", \"Segoe UI\", sans-serif); transition: border-color .15s ease-in-out, box-shadow .15s ease-in-out; } .ds-field:focus-visible { outline: 0; border-color: #9aacf3; box-shadow: var(--focus-ring, 0 0 0 .2rem rgba(107,128,150,.22)); } .ds-field:disabled { background: var(--bs-secondary-bg, #e9ecef); opacity: 1; }"
     },
     {
       "name": "Primary Navigation", "kind": "nav", "refersTo": "nav-primary",
       "description": "Compact shell navigation with clear active and keyboard states.",
       "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link ds-nav-link-active\" href=\"#\">Operation</a><a class=\"ds-nav-link\" href=\"#\">Logs</a></nav>",
-      "css": ".ds-nav { display: flex; gap: .35rem; padding: .5rem; background: #405e7a; border-radius: .5rem; } .ds-nav-link { padding: .5rem .8rem; color: rgba(236,241,246,.8); border: 1px solid transparent; border-radius: .5rem; font: 600 1rem/1.3 'Source Sans 3', 'Segoe UI', sans-serif; text-decoration: none; } .ds-nav-link:hover { color: #ecf1f6; } .ds-nav-link-active { color: #ecf1f6; background: rgba(236,241,246,.12); border-color: rgba(236,241,246,.14); } .ds-nav-link:focus-visible { outline: 0; box-shadow: 0 0 0 .2rem rgba(107,128,150,.22); }"
+      "css": ".ds-nav { display: flex; flex-wrap: wrap; gap: .35rem; padding: .5rem; background: rgb(var(--wspr-accent-rgb, 64, 94, 122)); border-radius: .5rem; } .ds-nav-link { padding: .5rem .8rem; color: rgba(var(--wspr-accent-text-rgb, 236,241,246), .8); border: 1px solid transparent; border-radius: .65rem; font: 500 1rem/1.3 var(--font-body, \"Source Sans 3\", \"Segoe UI\", sans-serif); letter-spacing: .01em; text-decoration: none; transition: background-color 120ms ease-in-out, border-color 120ms ease-in-out, color 120ms ease-in-out; } .ds-nav-link:hover { color: rgb(var(--wspr-accent-text-rgb, 236,241,246)); background: rgba(var(--wspr-accent-text-rgb, 236,241,246), .08); border-color: rgba(var(--wspr-accent-text-rgb, 236,241,246), .14); } .ds-nav-link-active { color: rgb(var(--wspr-accent-text-rgb, 236,241,246)); background: rgba(var(--wspr-accent-text-rgb, 236,241,246), .12); border-color: rgba(var(--wspr-accent-text-rgb, 236,241,246), .22); box-shadow: inset 0 0 0 1px rgba(var(--wspr-accent-text-rgb, 236,241,246), .04); } .ds-nav-link:focus-visible { outline: 0; box-shadow: var(--focus-ring, 0 0 0 .2rem rgba(107,128,150,.22)); }"
     },
     {
       "name": "Operational Panel", "kind": "card", "refersTo": "panel",
       "description": "Flat tonal grouping for a label and wrap-safe technical value.",
       "html": "<section class=\"ds-panel\"><span class=\"ds-panel-label\">Controller state</span><strong class=\"ds-panel-value\">Connected</strong></section>",
-      "css": ".ds-panel { display: grid; gap: .3rem; padding: 1.05rem 1.15rem; color: #495057; background: color-mix(in srgb, #fff 91%, #e9ecef 9%); border: 1px solid #dee2e6; border-radius: .375rem; } .ds-panel-label { font: 700 .75rem/1.3 'Barlow Semi Condensed', 'Segoe UI', sans-serif; letter-spacing: .08em; text-transform: uppercase; } .ds-panel-value { overflow-wrap: anywhere; font: 600 1.125rem/1.3 'Source Sans 3', 'Segoe UI', sans-serif; }"
+      "css": ".ds-panel { display: grid; gap: .3rem; padding: 1.05rem 1.15rem; color: var(--bs-body-color, #495057); background: color-mix(in srgb, var(--bs-body-bg, #fff) 91%, var(--bs-secondary-bg, #e9ecef) 9%); border: 1px solid var(--bs-border-color, #dee2e6); border-radius: var(--bs-border-radius, .375rem); } .ds-panel-label { font: 700 .75rem/1.3 var(--font-display, \"Barlow Semi Condensed\", \"Segoe UI\", sans-serif); letter-spacing: .08em; text-transform: uppercase; } .ds-panel-value { overflow-wrap: anywhere; font: 600 1.125rem/1.3 var(--font-body, \"Source Sans 3\", \"Segoe UI\", sans-serif); }"
     },
     {
       "name": "Signal Status Chip", "kind": "chip", "refersTo": "chip",
       "description": "Compact operational metadata that does not masquerade as a control.",
       "html": "<span class=\"ds-status-chip\">Connected</span>",
-      "css": ".ds-status-chip { display: inline-flex; align-items: center; min-height: 2rem; padding: .45rem .75rem; color: #495057; background: color-mix(in srgb, #fff 88%, #5f8f74 12%); border: 1px solid color-mix(in srgb, #dee2e6 75%, #5f8f74 25%); border-radius: 999px; font: 600 .875rem/1.3 'Source Sans 3', 'Segoe UI', sans-serif; }"
+      "css": ".ds-status-chip { display: inline-flex; align-items: center; min-height: 2rem; padding: .45rem .75rem; color: var(--bs-body-color, #495057); background: color-mix(in srgb, var(--bs-body-bg, #fff) 88%, var(--wspr-state-success, #5f8f74) 12%); border: 1px solid color-mix(in srgb, var(--bs-border-color, #dee2e6) 75%, var(--wspr-state-success, #5f8f74) 25%); border-radius: 999px; font: 600 .875rem/1.3 var(--font-body, \"Source Sans 3\", \"Segoe UI\", sans-serif); }"
     }
   ],
   "narrative": {
     "northStar": "The Bench Instrument",
-    "overview": "Wsprry Pi Console is compact, readable, specific, and truthful about state. Familiar Bootstrap behavior is shaped by a transmitter-slate shell, restrained tonal panels, and instrument-panel typography.",
+    "overview": "Wsprry Pi Console is an operational control surface for technically capable amateur-radio operators. It should feel like a clean bench instrument: compact, readable, and specific, with clear state changes and enough hierarchy to scan transmitter status, configuration, logs, maintenance, and spots without theatrical styling.\n\nBootstrap 5 and Zephyr provide familiar control behavior. The product gains its character from a transmitter-slate shell, local Source Sans 3 and Barlow Semi Condensed fonts, restrained tonal panels, and explicit operational state colors. Trust comes from truthful state, predictable placement, readable technical values, and consistent light, dark, desktop, and mobile behavior.",
     "keyCharacteristics": ["Precise, clean, technical, and operational.", "Dense enough for repeated appliance use without feeling cramped.", "Light and dark themes share one layout and interaction model.", "State, mode, and transmission context outrank decoration.", "Recovery actions remain close to the state requiring attention."],
     "rules": [
       { "name": "The State Color Rule", "body": "State colors are operational vocabulary, never decoration.", "section": "colors" },
@@ -96,6 +96,6 @@
       { "name": "The Familiar Geometry Rule", "body": "Shape communicates control type and grouping; it does not compete with operational content.", "section": "shapes" }
     ],
     "dos": ["Do preserve one interaction model across light and dark themes.", "Do use transmitter slate for shell identity and status chrome.", "Do use Source Sans 3 for reading and Barlow Semi Condensed for scan hierarchy.", "Do keep terminology direct and system state easy to scan.", "Do keep keyboard focus visible and loading state available to assistive technology.", "Do wrap long values safely or put wide tables in an explicit scroller.", "Do use borders and neutral mixes before adding interior shadows."],
-    "donts": ["Don't make the interface flashy, ornamental, or marketing-like.", "Don't replace precise workflows with vague abstractions.", "Don't use semantic colors for decoration.", "Don't replace the slate shell with saturated action blue.", "Don't create nested-card grids for dense operational screens.", "Don't use gradient text, decorative glassmorphism, colored side stripes, or novelty geometry.", "Don't compress technical tables until content wraps character by character.", "Don't use modal dialogs as the first answer for normal configuration; prefer inline progressive controls.", "Don't modify data/view_diag_logs.php through automated design tooling; that page is explicitly excluded."]
+    "donts": ["Don't make the interface flashy, ornamental, or marketing-like.", "Don't replace precise workflows with vague abstractions.", "Don't use semantic colors for decoration.", "Don't replace the slate shell with saturated action blue.", "Don't create nested-card grids for dense operational screens.", "Don't use gradient text, decorative glassmorphism, colored side stripes, or novelty geometry.", "Don't compress technical tables until content wraps character by character.", "Don't use modal dialogs as the first answer for normal configuration; prefer inline progressive controls.", "Don't modify `data/view_diag_logs.php` through automated design tooling; that page is explicitly excluded."]
   }
 }
