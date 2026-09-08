@@ -37,5 +37,14 @@
       "sha256": "a6c8d36a399c6eb63098c92521f2f9e80efffed9a13d1ba61f25127976b294f0"
     }
   ],
-  "next_unfinished_step": "Resolve intermittent SYS_INIT indication and repeat final guarded-default 40m/2m and candidate RF qualification."
+  "next_unfinished_step": "Resolve intermittent SYS_INIT indication and repeat final guarded-default 40m/2m and candidate RF qualification.",
+  "follow_up": {
+    "report": "matched-off.md",
+    "successful_full_band_runs": 2,
+    "successful_captures": 8,
+    "experimental_options": false,
+    "matched_pair_complete": true,
+    "pre_transmission_receiver_failures": 1,
+    "earlier_sys_init_reliability_issue": "unresolved"
+  }
 }

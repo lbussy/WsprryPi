@@ -1,5 +1,7 @@
 # Si5351 conducted comparison report
 
+**2026-09-08 follow-up:** a [complete matched 40 m/2 m pair with experiments off](matched-off.md) is now available. Both bands completed; the earlier intermittent SYS_INIT reliability issue remains unresolved. The original campaign findings below are retained.
+
 Final RF qualification is incomplete: repeated SYS_INIT status faults occurred
 with both experimental PLL-only tuning and guarded defaults. All five
 investigations were evaluated, but the final source is not qualified for
