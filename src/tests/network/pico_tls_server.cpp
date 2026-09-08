@@ -31,6 +31,8 @@ int main(int argc, char **argv) {
   network_test::Network network;
   const std::string device(32, argc > 2 ? argv[2][0] : 'a');
   wsprrypico::network::BrowserApi api{service, store, scheduler, network, device, "phase11-host-test"};
+  // Match the pinned Pico standalone image's active-job connection policy.
+  api.set_active_job_connections(true);
   wsprrypico::network::PicoServer server{service, api, device, "phase11-host-test"};
   if (!server.start()) { std::cerr << "TLS server initialization failed\n"; return 1; }
   std::cout << "READY " << server.port() << std::endl;

@@ -132,10 +132,11 @@ requires a Pico restart; this interface does not request one. Disabling Pico
 Wi-Fi can disconnect control; restoring network access then requires its supported
 Console/restart workflow.
 
-The tested unmodified Pico revision is
-`0fd8191c5218d3b5f2da9122a2ae55bf728ae3f2`. It defaults network control off,
-services one TLS session with one waiting TCP connection, and refuses fresh
-handshakes during physical armed/running jobs. Idle management acquires the same
+The pinned unmodified Pico revision is
+`a34a9a4342013d41379242f1e456ca3e3760b8db`. It defaults network control off
+and supports two TLS sessions with one waiting TCP connection and one computing
+handshake, including concurrent browser management during physical jobs.
+WsprryPi idle management still acquires the same
 host operation lock, obtains fresh unowned/inactive WTP status, disconnects the
 idle stream without RELEASE, performs one HTTP exchange, then re-inspects WTP.
 It never releases a job merely to obtain HTTP status.
@@ -144,8 +145,9 @@ That Pico revision requires numeric HTTP Host/Origin authority and its certifica
 helper requires an IP address. The host uses the resolved numeric HTTP authority
 while still authenticating the separately configured TLS identity. Present-server
 interop uses loopback IP SAN; separate TLS fixtures test hostname identities.
-Pico mDNS, hostname certificate provisioning and concurrent physical-job browser
-servicing are not implemented by this host work.
+Pico mDNS and hostname certificate provisioning are not implemented by this host
+work. Concurrent physical-job browser servicing belongs to the Pico firmware;
+the host loopback tests below do not qualify its physical timing or RF behavior.
 
 ## Hardware-free validation
 
@@ -166,7 +168,8 @@ submodules. CMake verifies both clean tracked source trees and pins; no download
 or sibling modification occurs. Ephemeral keys, generated credential headers,
 server/client binaries and screenshots stay in ignored `src/build/wtp-network`.
 The WsprryPi-owned server harness supplies a valid 32-hex device identity and
-inhibited software engine. Its POSIX adapter handles fatal socket errors with
+inhibited software engine, and explicitly enables the Pico standalone image's
+active-job connection policy. Its POSIX adapter handles fatal socket errors with
 lwIP's free-before-error-callback contract; Pico server/core source is unmodified.
 
 Use a different `WTP_NETWORK_BUILD_DIR` for sanitizer flags; pass matching
