@@ -234,7 +234,7 @@ class ReleaseTests(unittest.TestCase):
                  mock.patch.object(MOD, "runtime_source_identity") as identity:
                 resolved = MOD.download_release(state, Client(), FakeRunner())
             clone.assert_called_once_with(state, "commit", "a" * 40, mock.ANY)
-            interface.assert_called_once_with(state / "source")
+            interface.assert_called_once_with(state / "source", mock.ANY)
             identity.assert_called_once_with(state / "source", "2.1.0")
             self.assertEqual(resolved["checkout"], checkout)
             self.assertEqual(resolved["runtimeVersion"], "2.1.0")
@@ -1202,6 +1202,149 @@ class ApplyPolicyTests(unittest.TestCase):
             },
         }
 
+    def public_update(self, record, *, prepared=False, operation="update-plan", marker=1):
+        runtime = record.get("runtime", {})
+        identity = {"sourceCommit": record["sourceCommit"],
+                    "bindingSha256": runtime.get("bindingSha256"),
+                    "artifactSetSha256": runtime.get("artifactSetSha256"),
+                    "deploymentPlanSha256": runtime.get("deploymentPlanSha256")}
+        # Deliberately opaque: applications must not interpret provider internals.
+        plan = {"providerPrivate": {"generation": marker, "futureField": ["opaque"]}}
+        return {"schemaVersion": 1, "contract": MOD.RUNTIME_UPDATE_CONTRACT,
+                "operation": operation, "identity": identity,
+                "status": "prepared" if prepared else "planned",
+                "plan": plan, "planSha256": digest(MOD.canonical(plan)),
+                "postconditions": {"runtimeAbsent": prepared, "transmissionAuthorized": False}}
+
+
+    def test_update_uses_only_public_envelopes_and_preserves_ownership(self):
+        record = self.runtime_update_record(); identity = mock.Mock()
+        first = self.public_update(record)
+        executed = self.public_update(record, operation="update-execute")
+        final = self.public_update(record, prepared=True, marker=2)
+        with mock.patch.object(MOD, "runtime_update_provider", return_value=pathlib.Path("/provider")), \
+             mock.patch.object(MOD, "runtime_call", side_effect=[first, executed, final]) as calls, \
+             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged:
+            MOD.recover_and_remove_owned_runtime(self.record, record, identity, FakeRunner())
+        self.assertEqual([call.args[2] for call in calls.call_args_list],
+                         ["update-plan", "update-execute", "update-plan"])
+        self.assertEqual(unchanged.call_count, 3)
+        self.assertIn(record["runtime"]["bindingSha256"], calls.call_args_list[0].args[3])
+
+
+    def test_update_rejects_bad_envelopes_and_stale_results(self):
+        record = self.runtime_update_record()
+        for key, value in (("schemaVersion", 2), ("schemaVersion", True), ("contract", "unknown"),
+                           ("identity", {}), ("status", "success"),
+                           ("postconditions", {"runtimeAbsent": True}),
+                           ("postconditions", {"runtimeAbsent": 0, "transmissionAuthorized": False}),
+                           ("planSha256", "0" * 64)):
+            with self.subTest(key=key):
+                bad = self.public_update(record); bad[key] = value
+                with mock.patch.object(MOD, "runtime_update_provider", return_value=pathlib.Path("/provider")), \
+                     mock.patch.object(MOD, "runtime_call", return_value=bad) as calls, \
+                     mock.patch.object(MOD, "require_unchanged_ownership"):
+                    with self.assertRaises(MOD.ContractError):
+                        MOD.recover_and_remove_owned_runtime(self.record, record, mock.Mock(), FakeRunner())
+                self.assertEqual(calls.call_count, 1)
+        planned = self.public_update(record)
+        bad = self.public_update(record, prepared=True, operation="update-execute", marker=99)
+        with mock.patch.object(MOD, "runtime_update_provider", return_value=pathlib.Path("/provider")), \
+             mock.patch.object(MOD, "runtime_call", side_effect=[planned, bad]), \
+             mock.patch.object(MOD, "require_unchanged_ownership"):
+            with self.assertRaisesRegex(MOD.ContractError, "reviewed plan"):
+                MOD.recover_and_remove_owned_runtime(self.record, record, mock.Mock(), FakeRunner())
+
+
+    def test_update_never_repeats_effects_after_failure_or_no_progress(self):
+        record = self.runtime_update_record(); planned = self.public_update(record)
+        for replies in ([planned, MOD.ContractError("provider refused")],
+                        [planned, self.public_update(record, operation="update-execute"), planned]):
+            with mock.patch.object(MOD, "runtime_update_provider", return_value=pathlib.Path("/provider")), \
+                 mock.patch.object(MOD, "runtime_call", side_effect=replies) as calls, \
+                 mock.patch.object(MOD, "require_unchanged_ownership"):
+                with self.assertRaises(MOD.ContractError):
+                    MOD.recover_and_remove_owned_runtime(self.record, record, mock.Mock(), FakeRunner())
+                self.assertEqual(sum(call.args[2] == "update-execute" for call in calls.call_args_list), 1)
+
+
+    def test_update_blocks_changed_application_ownership_before_execution(self):
+        record = self.runtime_update_record()
+        with mock.patch.object(MOD, "runtime_update_provider", return_value=pathlib.Path("/provider")), \
+             mock.patch.object(MOD, "runtime_call", return_value=self.public_update(record)) as calls, \
+             mock.patch.object(MOD, "require_unchanged_ownership", side_effect=[None, MOD.ContractError("changed")]):
+            with self.assertRaisesRegex(MOD.ContractError, "changed"):
+                MOD.recover_and_remove_owned_runtime(self.record, record, mock.Mock(), FakeRunner())
+        self.assertEqual(calls.call_count, 1)
+
+
+    def test_update_negotiates_installed_or_exact_candidate_interface(self):
+        installed = self.root / "installed.py"; installed.write_text("# fixture")
+        candidate = self.root / "candidate.py"; candidate.write_text("# fixture")
+        capabilities = {"schemaVersion": 1, "contract": MOD.RUNTIME_UPDATE_CONTRACT,
+                        "operation": "capabilities", "capabilities":
+                        ["update-plan", "update-execute", "installation-status"]}
+        old = MOD.CommandResult("", "unsupported operation", 2)
+        supported = MOD.CommandResult(json.dumps(capabilities), "", 0)
+        with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed):
+            runner = FakeRunner({("python3", str(installed), "capabilities"): old,
+                                 ("python3", str(candidate), "capabilities"): supported})
+            self.assertEqual(MOD.runtime_update_provider(runner, candidate), candidate)
+            with self.assertRaisesRegex(MOD.ContractError, "exact compatible provider source"):
+                MOD.runtime_update_provider(FakeRunner({("python3", str(installed), "capabilities"): old}))
+            runner = FakeRunner({("python3", str(installed), "capabilities"): supported})
+            self.assertEqual(MOD.runtime_update_provider(runner, candidate), installed)
+            self.assertEqual(len(runner.calls), 1)
+
+
+    def test_release_receipt_does_not_require_development_rollback_metadata(self):
+        record = self.runtime_update_record(); record['channel'] = 'release'
+        record['manifest'] = {'productVersion': '0.9.0'}
+        value = {'schemaVersion': 1, 'contract': MOD.RUNTIME_UPDATE_CONTRACT,
+                 'operation': 'installation-status', 'status': 'neutral_ready',
+                 'receipt': record['runtime']}
+        with mock.patch.object(MOD, 'runtime_call', return_value=value), \
+             mock.patch.object(MOD, 'validate_development_rollback_authority') as rollback:
+            self.assertEqual(MOD.validate_resumable_neutral_activation(record, {}, FakeRunner()), record['runtime'])
+        rollback.assert_not_called()
+
+    def test_source_preflight_rejects_unsupported_candidate_before_effects(self):
+        candidate = self.root / "scripts/runtime_provider.py"
+        runner = FakeRunner({("python3", str(candidate), "capabilities"):
+                             MOD.CommandResult("", "unsupported", 2)})
+        with mock.patch.object(pathlib.Path, "is_file", return_value=True), \
+             mock.patch.object(pathlib.Path, "is_symlink", return_value=False):
+            with self.assertRaisesRegex(MOD.ContractError, "selected source lacks rp1-gpclk-runtime-update-v1"):
+                MOD.runtime_source_interface(self.root, runner)
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_update_preparation_keeps_dkms_record_after_public_absence(self):
+        record = self.runtime_update_record(); identity = mock.Mock()
+        for source in (record["sourceCommit"], "f" * 40):
+            args = self.runtime_update_args()
+            plan = json.loads((self.state / "plan.json").read_text())
+            plan["resolved"]["commit"] = source
+            MOD.atomic_json(self.state / "plan.json", plan)
+            with mock.patch.object(MOD, "load_ownership_record", return_value=(record, identity, None)), \
+                 mock.patch.object(MOD, "recover_and_remove_owned_runtime") as prepare, \
+                 mock.patch.object(MOD, "validate_development_rollback_authority"), \
+                 mock.patch.object(MOD, "replace_owned_record") as replace:
+                MOD.prepare_runtime_update(args, FakeRunner())
+            prepare.assert_called_once()
+            replacement = replace.call_args.args[3]
+            self.assertEqual(replacement["schema"], MOD.RECORD_SCHEMA)
+            self.assertNotIn("runtime", replacement)
+
+
+    def test_update_checks_rollback_authority_before_provider_effects(self):
+        with mock.patch.object(MOD, 'validate_development_rollback_authority',
+                               side_effect=MOD.ContractError('rollback changed')), \
+             mock.patch.object(MOD, 'recover_and_remove_owned_runtime') as effects:
+            with self.assertRaisesRegex(MOD.ContractError, 'rollback changed'):
+                MOD.remove_owned_runtime_for_fresh_activation(self.record,
+                    self.runtime_update_record(), mock.Mock(), FakeRunner())
+        effects.assert_not_called()
+
     def test_runtime_call_reports_provider_failure_detail(self):
         provider = self.root / "runtime_provider.py"
         response = {
@@ -1222,1024 +1365,6 @@ class ApplyPolicyTests(unittest.TestCase):
         self.assertEqual(caught.exception.operation, "remove")
         self.assertEqual(caught.exception.value, response)
 
-    def test_runtime_removal_self_deletion_resumes_in_same_transaction(self):
-        record = self.runtime_update_record()
-        MOD.atomic_json(self.record, record)
-        identity = self.record.stat()
-        provider = self.root / "runtime_provider.py"
-        provider.write_text(
-            "import json, pathlib\n"
-            "pathlib.Path(__file__).unlink()\n"
-            "print(json.dumps({'result': 'conflict', 'error': "
-            "{'detail': 'post-removal publication failed'}}))\n"
-            "raise SystemExit(12)\n"
-        )
-        resolved = {"checkout": {"path": str(self.root / "source")}}
-        runner = MOD.Runner()
-
-        def remove_then_fail(*unused):
-            MOD.runtime_call(runner, provider, "remove")
-
-        def publish_provider_only(path, value, value_identity, unused_resolved,
-                                  unused_runner):
-            replacement = copy.deepcopy(value)
-            replacement["schema"] = MOD.RECORD_SCHEMA
-            replacement.pop("runtime", None)
-            MOD.replace_owned_record(path, value, value_identity, replacement)
-
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
-             mock.patch.object(
-                 MOD, "recover_and_remove_owned_runtime",
-                 side_effect=remove_then_fail), \
-             mock.patch.object(
-                 MOD, "load_ownership_record",
-                 return_value=(record, identity, None)), \
-             mock.patch.object(
-                 MOD, "resume_interrupted_runtime_removal",
-                 side_effect=publish_provider_only) as resume:
-            MOD.remove_owned_runtime_for_fresh_activation(
-                self.record, record, identity, runner, resolved
-            )
-
-        self.assertFalse(provider.exists())
-        resumed = json.loads(self.record.read_text())
-        self.assertEqual(resumed["schema"], MOD.RECORD_SCHEMA)
-        self.assertNotIn("runtime", resumed)
-        resume.assert_called_once_with(
-            self.record, record, identity, resolved, runner
-        )
-
-    def test_runtime_removal_failure_with_provider_present_stays_fail_closed(self):
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        provider = self.root / "runtime_provider.py"
-        provider.write_text("# provider remains installed\n")
-        failure = MOD.RuntimeOperationError(
-            "remove", {"result": "conflict"},
-            MOD.CommandResult("", "", 12),
-            "RP1 runtime remove failed with conflict",
-        )
-        resolved = {"checkout": {"path": str(self.root / "source")}}
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
-             mock.patch.object(
-                 MOD, "recover_and_remove_owned_runtime",
-                 side_effect=failure), \
-             mock.patch.object(
-                 MOD, "resume_interrupted_runtime_removal") as resume:
-            with self.assertRaises(MOD.RuntimeOperationError):
-                MOD.remove_owned_runtime_for_fresh_activation(
-                    self.record, record, identity, FakeRunner(), resolved
-                )
-        resume.assert_not_called()
-
-    def runtime_update_inspection(self, result="neutral_ready"):
-        controller_state = {
-            "session": 42, "generation": 0, "id": 0, "error": 0,
-            "route": 0, "flags": 0,
-        }
-        journal = {
-            "phase": "complete-neutral", "controller": controller_state,
-            "requestId": "request-1234", "planSha256": "e" * 64,
-            "plan": {
-                "bootId": "00000000-0000-0000-0000-000000000001",
-                "bindingSha256": "b" * 64,
-                "artifactSetSha256": "c" * 64,
-                "application": {"wasActive": True},
-                "socketWasActive": True,
-            },
-            "application": {
-                "phase": "restored",
-                "service": {"LoadState": "loaded", "ActiveState": "active",
-                            "UnitFileState": "enabled", "MainPID": "42"},
-            },
-        }
-        value = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": result, "state": result,
-            "conflicts": ([] if result != "conflict" else
-                          ["loaded-controller-without-completed-activation"]),
-            "identities": {"installedBinding": {
-                "status": "valid", "sha256": "b" * 64,
-                "value": {"artifactSetSha256": "c" * 64,
-                          "sourceCommit": "a" * 40},
-            }},
-            "artifacts": {"/bound/runtime": {"status": "exact"}},
-            "routes": {name: None for name in
-                       ("requested", "configured", "persisted", "active")},
-            "modules": {
-                MOD.CONTROLLER_MODULE_NAME: {"status": "loaded"},
-                MOD.MODULE_NAME: {"status": "absent"},
-            },
-            "endpoints": {
-                "controller": {"status": "owned", "open": False},
-                "consumer": {"status": "absent", "open": False},
-            },
-            "routeSelected": False, "executionReady": False,
-            "journals": {"activation.json": {"status": "present", "value": journal}},
-            "activation": {"status": "observed", "value": {
-                "bindingSha256": "b" * 64,
-                "artifactSetSha256": "c" * 64,
-                "bootId": "00000000-0000-0000-0000-000000000001",
-                "controllerState": controller_state,
-                "controller": {"status": "loaded", "exact": True},
-                "applicationService": {
-                    "load": "loaded", "active": "active",
-                    "enabled": "enabled",
-                    "fragment": "/etc/systemd/system/wsprrypi.service",
-                    "MainPID": "99" if result == "conflict" else "42",
-                },
-                "socket": {"active": "active", "fragment":
-                    "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket"},
-                "managerSocket": {"status": "owned"},
-                "managerService": {"load": "loaded", "fragment":
-                    "/usr/lib/systemd/system/rp1-gpclk-route-manager@.service"},
-                "inhibited": False,
-            }},
-            "manager": {"status": "observed", "query": {
-                "operation": "query", "status": "ok", "state": {
-                    "bindingSha256": "b" * 64,
-                    "bootId": "00000000-0000-0000-0000-000000000001",
-                    "controller": controller_state, "activeRoute": None,
-                    "configuredRoute": None, "qualification": False,
-                    "outputEnabled": False, "applicationInhibited": False,
-                    "pendingTransaction": None, "application": None,
-                    "applicationRestoration": True,
-                },
-            }},
-        }
-        return value
-
-    def recovered_runtime_update_inspection(self, *, prior_boot=False):
-        value = self.runtime_update_inspection("activation_required")
-        value["modules"] = {
-            MOD.CONTROLLER_MODULE_NAME: {"status": "absent"},
-            MOD.MODULE_NAME: {"status": "absent"},
-        }
-        value["endpoints"] = {
-            "controller": {"status": "absent", "open": False},
-            "consumer": {"status": "absent", "open": False},
-        }
-        activation = value["activation"]["value"]
-        activation["controllerState"] = None
-        activation["applicationService"] = {
-            "load": "loaded", "active": "inactive", "enabled": "enabled",
-            "fragment": "/etc/systemd/system/wsprrypi.service", "MainPID": "0",
-        }
-        if prior_boot:
-            value["reboot"] = {"occurred": True}
-        else:
-            activation["inhibited"] = True
-            value["journals"]["activation.json"]["value"]["phase"] = "recovered-inhibited"
-        return value
-
-    def route_recovered_runtime_update_inspection(self):
-        value = self.runtime_update_inspection("recovery_required")
-        controller = value["activation"]["value"]["controllerState"]
-        controller["generation"] = 2
-        journal = value["journals"]["activation.json"]["value"]
-        journal["phase"] = "rollback-failed"
-        route = {"phase": "recovered-inhibited", "observation": controller}
-        manager = {"complete": True, "controller": controller}
-        application = {"phase": "route-recovered", "controller": {
-            "session": controller["session"], "generation": 1,
-            "id": 9, "error": 0, "route": 1, "flags": 6}}
-        value["journals"].update({
-            "transaction.json": {"status": "present", "value": route},
-            "manager.json": {"status": "present", "value": manager},
-            "application.json": {"status": "present", "value": application},
-        })
-        return value
-
-    def selected_runtime_update_inspection(self):
-        value = self.runtime_update_inspection("exact_ready")
-        value["routes"]["active"] = "gpio4"
-        value["modules"][MOD.MODULE_NAME] = {"status": "loaded"}
-        value["endpoints"]["consumer"] = {
-            "status": "owned", "open": False,
-        }
-        value["routeSelected"] = True
-        value["executionReady"] = True
-        value["safety"] = {
-            "outputInhibited": False, "operationalReady": True,
-            "owner": False, "lease": False,
-            "clock": "quiescent", "gpio": "quiescent",
-            "dma": "quiescent",
-        }
-        value["artifacts"][str(MOD.RUNTIME_ROUTE_CLIENT)] = {
-            "status": "exact",
-        }
-        value["identities"]["installedBinding"]["value"]["files"] = {
-            str(MOD.RUNTIME_ROUTE_CLIENT): "f" * 64,
-        }
-        manager = value["manager"]["query"]["state"]
-        manager["activeRoute"] = "gpio4"
-        manager["pendingTransaction"] = {
-            "version": 1, "phase": "complete-inhibited",
-        }
-        return value
-
-    def removed_runtime_update_inspection(self, phase="neutral-restored"):
-        value = self.runtime_update_inspection()
-        # Activation remains generation zero; a switch and removal advance the
-        # same controller session without changing the installation record.
-        controller = copy.deepcopy(value["activation"]["value"]["controllerState"])
-        controller["generation"] = 2
-        value["activation"]["value"]["controllerState"] = controller
-        binding = value["activation"]["value"]["bindingSha256"]
-        boot = value["activation"]["value"]["bootId"]
-        transaction = {"phase": "recovered-inhibited", "observation": controller,
-                       "session": controller["session"], "binding": binding, "boot": boot}
-        manager = {"complete": True, "controller": controller,
-                   "binding": binding, "boot": boot}
-        application = {"operation": "remove", "phase": phase, "controller": None,
-                       "ready": None, "binding": binding, "boot": boot}
-        for name, journal in (("transaction.json", transaction),
-                              ("manager.json", manager),
-                              ("application.json", application)):
-            value["journals"][name] = {"status": "present", "value": journal}
-        value["manager"]["query"]["state"].update({
-            "controller": controller, "pendingTransaction": transaction,
-            "application": application,
-        })
-        return value
-
-    def runtime_recovery_plan(self, inspected):
-        journal = inspected["journals"]["activation.json"]["value"]
-        route_recovery = None
-        if (inspected["result"] == "recovery_required" or
-                inspected["activation"]["value"]["controllerState"]["generation"] > 0):
-            route_recovery = {
-                name: digest(MOD.canonical(inspected["journals"][name]["value"]))
-                for name in ("transaction.json", "manager.json", "application.json")
-            }
-        plan = {
-            "version": 2, "operation": "neutral-activation-recovery",
-            "bindingSha256": "b" * 64,
-            "bootId": inspected["activation"]["value"]["bootId"],
-            "activationJournalSha256": digest(MOD.canonical(journal)),
-            "controllerLoaded": True,
-            "controllerState": inspected["activation"]["value"]["controllerState"],
-            "routeRecoverySha256": route_recovery, "socketWasActive": True,
-            "alreadyRecovered": False,
-        }
-        return {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover-plan",
-            "planSha256": digest(MOD.canonical(plan)), "plan": plan,
-        }
-
-    def test_runtime_update_recovers_exact_neutral_and_pid_drift_retry(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        neutral = self.runtime_update_inspection("neutral_ready")
-        pid_drift = self.runtime_update_inspection("conflict")
-        installer_started = copy.deepcopy(pid_drift)
-        installer_journal = installer_started["journals"]["activation.json"]["value"]
-        installer_journal["plan"]["application"]["wasActive"] = False
-        installer_journal["application"] = {
-            "phase": "stopped",
-            "service": {"LoadState": "loaded", "ActiveState": "inactive",
-                        "UnitFileState": "enabled", "MainPID": "0"},
-        }
-        masked = copy.deepcopy(pid_drift)
-        masked["activation"]["value"]["applicationService"] = {
-            "load": "masked", "active": "inactive", "enabled": "masked",
-            "fragment": "/etc/systemd/system/wsprrypi.service", "MainPID": "0",
-        }
-        externally_stopped = copy.deepcopy(pid_drift)
-        externally_stopped["activation"]["value"]["applicationService"][
-            "active"
-        ] = "inactive"
-        externally_stopped["activation"]["value"]["applicationService"][
-            "MainPID"
-        ] = "0"
-        for label, initial in (
-            ("neutral-ready", neutral),
-            ("pid-drift", pid_drift),
-            ("installer-started", installer_started),
-            ("masked", masked),
-            ("externally-stopped", externally_stopped),
-        ):
-            with self.subTest(result=label):
-                planned = self.runtime_recovery_plan(initial)
-                recovered = {
-                    "contract": MOD.RUNTIME_READINESS_CONTRACT,
-                    "operation": "activation-recover",
-                    "planSha256": planned["planSha256"],
-                    "response": {"status": "recovered-inhibited"},
-                }
-                final = self.recovered_runtime_update_inspection()
-                with mock.patch.object(
-                        MOD, "load_ownership_record",
-                        return_value=(record, identity, None)), \
-                     mock.patch.object(
-                        MOD, "runtime_call",
-                        side_effect=[initial, planned, recovered, final]) as calls, \
-                     mock.patch.object(
-                        MOD, "preserve_owned_activation_journal") as preserve, \
-                     mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
-                     mock.patch.object(
-                         MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-                    MOD.prepare_runtime_update(args, FakeRunner())
-                self.assertEqual(
-                    [call.args[2] for call in calls.call_args_list],
-                    ["inspect", "activation-recover-plan", "activation-recover", "inspect"],
-                )
-                preserve.assert_called_once_with(record, "before-application-update")
-                self.assertEqual(unchanged.call_count, 2)
-                remove.assert_called_once_with(
-                    args.record, record, identity, mock.ANY, mock.ANY
-                )
-
-    def test_runtime_update_recovers_exact_same_boot_route_recovery(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        initial = self.route_recovered_runtime_update_inspection()
-        planned = self.runtime_recovery_plan(initial)
-        recovered = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover",
-            "planSha256": planned["planSha256"],
-            "response": {"status": "recovered-inhibited"},
-        }
-        final = self.recovered_runtime_update_inspection()
-        with mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(
-                MOD, "runtime_call",
-                side_effect=[initial, planned, recovered, final]) as calls, \
-             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
-             mock.patch.object(MOD, "require_unchanged_ownership"), \
-             mock.patch.object(
-                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        self.assertEqual([call.args[2] for call in calls.call_args_list],
-                         ["inspect", "activation-recover-plan",
-                          "activation-recover", "inspect"])
-        remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY, mock.ANY
-        )
-
-    def test_repeat_install_recovers_completed_route_removal(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        for phase in ("neutral-restored", "neutral-stopped", "neutral-administrator-masked"):
-            with self.subTest(phase=phase):
-                initial = self.removed_runtime_update_inspection(phase)
-                planned = self.runtime_recovery_plan(initial)
-                recovered = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-                             "operation": "activation-recover",
-                             "planSha256": planned["planSha256"],
-                             "response": {"status": "recovered-inhibited"}}
-                with mock.patch.object(MOD, "load_ownership_record",
-                                       return_value=(record, identity, None)), \
-                     mock.patch.object(MOD, "runtime_call", side_effect=[
-                         initial, planned, recovered, self.recovered_runtime_update_inspection()
-                     ]) as calls, \
-                     mock.patch.object(MOD, "preserve_owned_activation_journal"), \
-                     mock.patch.object(MOD, "require_unchanged_ownership"), \
-                     mock.patch.object(MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-                    runner = FakeRunner()
-                    MOD.prepare_runtime_update(args, runner)
-                self.assertEqual([call.args[2] for call in calls.call_args_list],
-                                 ["inspect", "activation-recover-plan", "activation-recover", "inspect"])
-                self.assertEqual(runner.calls, [], "completed removal needs no second route recovery")
-                remove.assert_called_once()
-
-    def test_completed_removal_requires_exact_recovery_evidence_before_mutation(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        initial = self.removed_runtime_update_inspection()
-        planned = self.runtime_recovery_plan(initial)
-        cases = []
-        for name in ("transaction.json", "manager.json", "application.json"):
-            missing = copy.deepcopy(initial)
-            missing["journals"][name] = {"status": "absent"}
-            cases.append((f"missing-{name}", missing, planned))
-            changed = copy.deepcopy(initial)
-            changed["journals"][name]["value"]["boot"] = "foreign-boot"
-            cases.append((f"changed-{name}", changed, planned))
-        for key, value in (("session", 43), ("generation", 0), ("flags", 6), ("error", 1)):
-            changed = copy.deepcopy(initial)
-            changed["activation"]["value"]["controllerState"][key] = value
-            cases.append((key, changed, planned))
-        for key, value in (("routeRecoverySha256", None),
-                           ("controllerState", initial["journals"]["activation.json"]["value"]["controller"]),
-                           ("bindingSha256", "f" * 64), ("bootId", "foreign-boot")):
-            changed_plan = copy.deepcopy(planned)
-            changed_plan["plan"][key] = value
-            changed_plan["planSha256"] = digest(MOD.canonical(changed_plan["plan"]))
-            cases.append((f"plan-{key}", initial, changed_plan))
-        for label, inspection, plan in cases:
-            with self.subTest(label=label), \
-                 mock.patch.object(MOD, "load_ownership_record", return_value=(record, identity, None)), \
-                 mock.patch.object(MOD, "runtime_call", side_effect=[inspection, plan]) as calls, \
-                 mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
-                 mock.patch.object(MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-                with self.assertRaises(MOD.ContractError):
-                    MOD.prepare_runtime_update(args, FakeRunner())
-                self.assertTrue(all(call.args[2] in {"inspect", "activation-recover-plan"}
-                                    for call in calls.call_args_list))
-                preserve.assert_not_called()
-                remove.assert_not_called()
-
-    def test_repeat_install_recovers_selected_route_before_provider_apply(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        selected = self.selected_runtime_update_inspection()
-        route_recovered = self.route_recovered_runtime_update_inspection()
-        planned = self.runtime_recovery_plan(route_recovered)
-        recovered = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover",
-            "planSha256": planned["planSha256"],
-            "response": {"status": "recovered-inhibited"},
-        }
-        final = self.recovered_runtime_update_inspection()
-        route_reply = {
-            "schemaVersion": 3,
-            "contract": MOD.RUNTIME_ROUTE_CONTRACT,
-            "operation": "recover",
-            "status": "recovered-inhibited",
-            "state": {
-                "bindingSha256": record["runtime"]["bindingSha256"],
-                "activeRoute": None, "configuredRoute": None,
-                "qualification": False, "outputEnabled": False,
-                "applicationInhibited": True,
-            },
-        }
-        route_client = pathlib.Path(self.temp.name) / "runtime_route_client.py"
-        route_client.write_text("# exact fixture\n")
-        selected["artifacts"].pop(str(MOD.RUNTIME_ROUTE_CLIENT))
-        selected["artifacts"][str(route_client)] = {"status": "exact"}
-        selected["identities"]["installedBinding"]["value"]["files"] = {
-            str(route_client): digest(route_client.read_bytes()),
-        }
-        runner = FakeRunner({
-            ("python3", str(route_client), "recover", "--execute"):
-                MOD.CommandResult(json.dumps(route_reply), "", 0),
-        })
-        with mock.patch.object(
-                MOD, "RUNTIME_ROUTE_CLIENT", route_client), \
-             mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(
-                MOD, "runtime_call",
-                side_effect=[selected, route_recovered, planned,
-                             recovered, final]) as calls, \
-             mock.patch.object(
-                MOD, "preserve_owned_activation_journal") as preserve, \
-             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
-             mock.patch.object(
-                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-            MOD.prepare_runtime_update(args, runner)
-        self.assertEqual(
-            runner.calls,
-            [("python3", str(route_client), "recover", "--execute")],
-        )
-        self.assertEqual(
-            [call.args[2] for call in calls.call_args_list],
-            ["inspect", "inspect", "activation-recover-plan",
-             "activation-recover", "inspect"],
-        )
-        preserve.assert_called_once_with(
-            record, "before-application-update"
-        )
-        self.assertEqual(unchanged.call_count, 4)
-        remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY, mock.ANY
-        )
-
-    def test_runtime_update_removes_already_recovered_runtime_before_restart(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        recovered = self.recovered_runtime_update_inspection()
-        with mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_call", return_value=recovered), \
-             mock.patch.object(
-                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY, mock.ANY
-        )
-
-    def test_runtime_removal_removes_already_recovered_runtime(self):
-        args = MOD.parser().parse_args([
-            "prepare-runtime-removal", "--record", str(self.record),
-        ])
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        recovered = self.recovered_runtime_update_inspection()
-        provider = self.root / "installed/runtime_provider.py"
-        provider.parent.mkdir()
-        provider.write_text("# exact installed provider fixture\n")
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
-             mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_call", return_value=recovered), \
-             mock.patch.object(
-                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY, None
-        )
-
-    def test_runtime_removal_finalizes_missing_provider_checkpoint(self):
-        args = MOD.parser().parse_args([
-            "prepare-runtime-removal", "--record", str(self.record),
-        ])
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        missing_provider = self.root / "installed/runtime_provider.py"
-        inventory = {
-            "activeModule": False, "activeController": False,
-            "configuredRoute": False,
-        }
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", missing_provider), \
-             mock.patch.object(
-                 MOD, "load_ownership_record",
-                 return_value=(record, identity, None)), \
-             mock.patch.object(
-                 MOD, "existing_inventory", return_value=inventory), \
-             mock.patch.object(pathlib.Path, "exists", autospec=True,
-                               return_value=False), \
-             mock.patch.object(pathlib.Path, "is_symlink", autospec=True,
-                               return_value=False), \
-             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
-             mock.patch.object(MOD, "replace_owned_record") as replace, \
-             mock.patch.object(MOD, "runtime_call") as runtime_calls:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        unchanged.assert_called_once_with(
-            args.record, record, identity,
-            "completed runtime removal verification",
-        )
-        replacement = copy.deepcopy(record)
-        replacement["schema"] = MOD.RECORD_SCHEMA
-        replacement.pop("runtime")
-        replace.assert_called_once_with(
-            args.record, record, identity, replacement
-        )
-        runtime_calls.assert_not_called()
-
-    def test_runtime_update_retires_prior_boot_route_recovery(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        prior = self.runtime_update_inspection("recovery_required")
-        prior["modules"] = {
-            MOD.CONTROLLER_MODULE_NAME: {"status": "absent"},
-            MOD.MODULE_NAME: {"status": "absent"},
-        }
-        prior["endpoints"] = {
-            "controller": {"status": "absent", "open": False},
-            "consumer": {"status": "absent", "open": False},
-        }
-        prior["managerSocket"] = {"status": "absent"}
-        prior["reboot"] = {"occurred": True, "required": False}
-        prior["activation"]["value"]["bootId"] = (
-            "00000000-0000-0000-0000-000000000002"
-        )
-        prior["activation"]["value"]["controllerState"] = None
-        prior["journals"].update({
-            "transaction.json": {"status": "present", "value": {"route": 1}},
-            "manager.json": {"status": "present", "value": {"complete": True}},
-            "application.json": {"status": "present", "value": {"phase": "restored"}},
-        })
-        journal = prior["journals"]["activation.json"]["value"]
-        plan = {
-            "version": 2, "operation": "retire-post-reboot-activation",
-            "bindingSha256": "b" * 64,
-            "artifactSetSha256": "c" * 64,
-            "bootId": "00000000-0000-0000-0000-000000000002",
-            "lastDeploymentSha256": "d" * 64,
-            "activationJournalSha256": digest(MOD.canonical(journal)),
-            "applicationIdleSha256": None,
-            "transactionJournalSha256": {
-                "transaction.json": "1" * 64,
-                "manager.json": "2" * 64,
-                "application.json": "3" * 64,
-            },
-        }
-        plan_digest = digest(MOD.canonical(plan))
-        retirement = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-retire-plan",
-            "planSha256": plan_digest, "plan": plan,
-        }
-        retired = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-retire", "planSha256": plan_digest,
-            "response": {
-                "status": "retired-post-reboot-activation",
-                "activationJournalSha256": plan["activationJournalSha256"],
-            },
-        }
-        final = self.recovered_runtime_update_inspection(prior_boot=True)
-        final["journals"]["activation.json"] = {"status": "absent"}
-        with mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(
-                MOD, "runtime_call",
-                side_effect=[prior, retirement, retired, final]) as calls, \
-             mock.patch.object(
-                MOD, "preserve_owned_activation_journal") as preserve, \
-             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
-             mock.patch.object(
-                MOD, "recover_and_remove_owned_runtime") as remove_runtime, \
-             mock.patch.object(MOD, "replace_owned_record") as replace_record:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        self.assertEqual(
-            [call.args[2] for call in calls.call_args_list],
-            ["inspect", "activation-retire-plan", "activation-retire", "inspect"],
-        )
-        preserve.assert_called_once_with(record, "before-retirement")
-        self.assertEqual(unchanged.call_count, 2)
-        remove_runtime.assert_called_once_with(
-            args.record, record, identity, mock.ANY
-        )
-        replacement = copy.deepcopy(record)
-        replacement["schema"] = MOD.RECORD_SCHEMA
-        replacement.pop("runtime")
-        replace_record.assert_called_once_with(
-            args.record, record, identity, replacement
-        )
-
-    def test_runtime_update_resumes_after_prior_boot_retirement(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        retired = self.recovered_runtime_update_inspection(prior_boot=True)
-        retired["journals"]["activation.json"] = {"status": "absent"}
-        with mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(
-                MOD, "runtime_call", return_value=retired), \
-             mock.patch.object(
-                MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY, mock.ANY
-        )
-
-    def test_interrupted_runtime_removal_recovers_recorded_pending_plan(self):
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        source = self.root / "provider-source"
-        scripts = source / "scripts"
-        scripts.mkdir(parents=True)
-        deployment = scripts / "runtime_deployment.py"
-        deployment.write_text("# exact deployment fixture\n")
-        missing_provider = self.root / "installed/runtime_provider.py"
-        destinations = {
-            path: {"before": None, "after": "a" * 64}
-            for path in MOD.runtime_deployment_destinations()
-        }
-        planned = {
-            "planSha256": record["runtime"]["deploymentPlanSha256"],
-            "destinations": destinations,
-            "applicationRemainsInhibited": True,
-        }
-        runner = FakeRunner({
-            ("python3", str(deployment), "recover"):
-                MOD.CommandResult(json.dumps(planned), "", 0),
-            ("python3", str(deployment), "recover", "--plan-sha256",
-             record["runtime"]["deploymentPlanSha256"]):
-                MOD.CommandResult(
-                    "Files deployed/recovered; application remains masked. No module activated.\n",
-                    "", 0),
-        })
-        pending = pathlib.Path(
-            "/var/lib/rp1-gpclk-dkms/runtime-admin/deployment-pending.json"
-        )
-        pending_checks = 0
-        def exists(path):
-            nonlocal pending_checks
-            if path != pending:
-                return False
-            pending_checks += 1
-            return pending_checks == 1
-        inventory = {
-            "activeModule": False, "activeController": False,
-            "configuredRoute": False,
-        }
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", missing_provider), \
-             mock.patch.object(
-                MOD, "revalidate_checkout", return_value=source), \
-             mock.patch.object(
-                MOD, "existing_inventory", return_value=inventory), \
-             mock.patch.object(pathlib.Path, "exists", autospec=True,
-                               side_effect=exists), \
-             mock.patch.object(pathlib.Path, "is_symlink", autospec=True,
-                               return_value=False), \
-             mock.patch.object(MOD, "require_unchanged_ownership") as unchanged, \
-             mock.patch.object(MOD, "replace_owned_record") as replace:
-            MOD.resume_interrupted_runtime_removal(
-                self.record, record, identity,
-                {"checkout": {"path": str(source)}}, runner,
-            )
-        self.assertEqual(unchanged.call_count, 2)
-        replacement = copy.deepcopy(record)
-        replacement["schema"] = MOD.RECORD_SCHEMA
-        replacement.pop("runtime")
-        replace.assert_called_once_with(
-            self.record, record, identity, replacement
-        )
-
-    def test_runtime_update_dispatches_missing_provider_removal_recovery(self):
-        args = self.runtime_update_args()
-        plan = json.loads((self.state / "plan.json").read_text())
-        plan["resolved"]["checkout"] = {"path": str(self.root / "source")}
-        MOD.atomic_json(self.state / "plan.json", plan)
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        missing_provider = self.root / "installed/runtime_provider.py"
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", missing_provider), \
-             mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(
-                MOD, "resume_interrupted_runtime_removal") as resume, \
-             mock.patch.object(MOD, "runtime_call") as runtime_calls:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        resume.assert_called_once_with(
-            args.record, record, identity, plan["resolved"], mock.ANY
-        )
-        runtime_calls.assert_not_called()
-
-    def test_selected_route_recovery_rejects_nonquiescent_state(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        selected = self.selected_runtime_update_inspection()
-        selected["safety"]["owner"] = True
-        route_client = pathlib.Path(self.temp.name) / "runtime_route_client.py"
-        route_client.write_text("# exact fixture\n")
-        selected["artifacts"].pop(str(MOD.RUNTIME_ROUTE_CLIENT))
-        selected["artifacts"][str(route_client)] = {"status": "exact"}
-        selected["identities"]["installedBinding"]["value"]["files"] = {
-            str(route_client): digest(route_client.read_bytes()),
-        }
-        runner = FakeRunner()
-        with mock.patch.object(MOD, "RUNTIME_ROUTE_CLIENT", route_client), \
-             mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_call", return_value=selected):
-            with self.assertRaisesRegex(
-                    MOD.ContractError, "not closed and quiescent"):
-                MOD.prepare_runtime_update(args, runner)
-        self.assertEqual(runner.calls, [])
-
-    def test_selected_route_recovery_rejects_tampered_route_client(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        selected = self.selected_runtime_update_inspection()
-        route_client = pathlib.Path(self.temp.name) / "runtime_route_client.py"
-        route_client.write_text("# tampered fixture\n")
-        selected["artifacts"].pop(str(MOD.RUNTIME_ROUTE_CLIENT))
-        selected["artifacts"][str(route_client)] = {"status": "exact"}
-        selected["identities"]["installedBinding"]["value"]["files"] = {
-            str(route_client): "f" * 64,
-        }
-        runner = FakeRunner()
-        with mock.patch.object(MOD, "RUNTIME_ROUTE_CLIENT", route_client), \
-             mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_call", return_value=selected):
-            with self.assertRaisesRegex(
-                    MOD.ContractError, "missing or unbound"):
-                MOD.prepare_runtime_update(args, runner)
-        self.assertEqual(runner.calls, [])
-
-    def test_runtime_update_defers_changed_source_to_provider_migration(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        record["sourceCommit"] = "f" * 40
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        stdout = io.StringIO()
-        with mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_call") as calls, \
-             mock.patch.object(MOD.sys, "stdout", stdout):
-            MOD.prepare_runtime_update(args, FakeRunner())
-        calls.assert_not_called()
-        self.assertIn("deferring exact predecessor recovery", stdout.getvalue())
-
-    def test_runtime_update_recovers_route_after_completed_neutral_activation(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        initial = self.route_recovered_runtime_update_inspection()
-        initial["journals"]["activation.json"]["value"]["phase"] = "complete-neutral"
-        planned = self.runtime_recovery_plan(initial)
-        recovered = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover",
-            "planSha256": planned["planSha256"],
-            "response": {"status": "recovered-inhibited"},
-        }
-        final = self.recovered_runtime_update_inspection()
-        with mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(
-                MOD, "runtime_call",
-                side_effect=[initial, planned, recovered, final]) as calls, \
-             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
-             mock.patch.object(MOD, "require_unchanged_ownership"), \
-             mock.patch.object(
-                 MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        self.assertEqual([call.args[2] for call in calls.call_args_list],
-                         ["inspect", "activation-recover-plan",
-                          "activation-recover", "inspect"])
-        remove.assert_called_once_with(
-            args.record, record, identity, mock.ANY, mock.ANY
-        )
-
-    def test_runtime_update_skips_fresh_state_and_removes_inactive_runtime(self):
-        args = self.runtime_update_args()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        with mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(None, None, None)), \
-             mock.patch.object(MOD, "runtime_call") as calls:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        calls.assert_not_called()
-
-        provider_only = {"schema": MOD.RECORD_SCHEMA,
-                         "sourceCommit": "a" * 40}
-        with mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(provider_only, identity, None)), \
-             mock.patch.object(MOD, "runtime_call") as calls:
-            MOD.prepare_runtime_update(args, FakeRunner())
-        calls.assert_not_called()
-
-        record = self.runtime_update_record()
-        for prior_boot in (False, True):
-            with self.subTest(prior_boot=prior_boot), \
-                 mock.patch.object(
-                    MOD, "load_ownership_record",
-                    return_value=(record, identity, None)), \
-                 mock.patch.object(
-                    MOD, "runtime_call",
-                    return_value=self.recovered_runtime_update_inspection(
-                        prior_boot=prior_boot)) as calls, \
-                 mock.patch.object(
-                    MOD, "remove_owned_runtime_for_fresh_activation") as remove:
-                MOD.prepare_runtime_update(args, FakeRunner())
-            calls.assert_called_once()
-            remove.assert_called_once_with(
-                args.record, record, identity, mock.ANY, mock.ANY
-            )
-
-    def test_runtime_update_refuses_unsafe_state_before_recovery(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        unsafe_cases = []
-        route = self.runtime_update_inspection()
-        route["routes"]["active"] = "gpio4"
-        unsafe_cases.append(route)
-        consumer = self.runtime_update_inspection()
-        consumer["modules"][MOD.MODULE_NAME] = {"status": "loaded"}
-        unsafe_cases.append(consumer)
-        conflict = self.runtime_update_inspection("conflict")
-        conflict["conflicts"].append("foreign-conflict")
-        unsafe_cases.append(conflict)
-        pid = self.runtime_update_inspection("conflict")
-        pid["activation"]["value"]["applicationService"]["MainPID"] = "42"
-        unsafe_cases.append(pid)
-        for mutation, value in (
-            ("mask-wrong-fragment", "/etc/systemd/system/wsprrypi.service"),
-            ("mask-active", "active"),
-            ("mask-running-pid", "7"),
-        ):
-            masked = self.runtime_update_inspection("conflict")
-            service = masked["activation"]["value"]["applicationService"]
-            service.update({
-                "load": "masked", "active": "inactive", "enabled": "masked",
-                "fragment": "/etc/systemd/system/wsprrypi.service", "MainPID": "0",
-            })
-            if mutation == "mask-wrong-fragment":
-                service["fragment"] = "/dev/null"
-            elif mutation == "mask-active":
-                service["active"] = value
-            else:
-                service["MainPID"] = value
-            unsafe_cases.append(masked)
-        for mutation in ("foreign-unit", "output-enabled"):
-            started = self.runtime_update_inspection("conflict")
-            started_journal = started["journals"]["activation.json"]["value"]
-            started_journal["plan"]["application"]["wasActive"] = False
-            started_journal["application"] = {
-                "phase": "stopped",
-                "service": {"LoadState": "loaded", "ActiveState": "inactive",
-                            "UnitFileState": "enabled", "MainPID": "0"},
-            }
-            if mutation == "foreign-unit":
-                started["activation"]["value"]["applicationService"]["fragment"] = (
-                    "/etc/systemd/system/foreign.service"
-                )
-            else:
-                started["manager"]["query"]["state"]["outputEnabled"] = True
-            unsafe_cases.append(started)
-        for inspected in unsafe_cases:
-            with self.subTest(inspected=inspected.get("conflicts")), \
-                 mock.patch.object(
-                    MOD, "load_ownership_record",
-                    return_value=(record, identity, None)), \
-                 mock.patch.object(MOD, "runtime_call", return_value=inspected) as calls:
-                with self.assertRaises(MOD.ContractError):
-                    MOD.prepare_runtime_update(args, FakeRunner())
-            calls.assert_called_once()
-
-    def test_runtime_update_revalidates_ownership_and_final_identity(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        initial = self.runtime_update_inspection()
-        planned = self.runtime_recovery_plan(initial)
-        with mock.patch.object(
-                MOD, "load_ownership_record", return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_call",
-                               side_effect=[initial, planned]) as calls, \
-             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
-             mock.patch.object(
-                MOD, "require_unchanged_ownership",
-                side_effect=MOD.ContractError("ownership changed")):
-            with self.assertRaisesRegex(MOD.ContractError, "ownership changed"):
-                MOD.prepare_runtime_update(args, FakeRunner())
-        self.assertEqual([call.args[2] for call in calls.call_args_list],
-                         ["inspect", "activation-recover-plan"])
-        preserve.assert_not_called()
-
-        with mock.patch.object(
-                MOD, "load_ownership_record", return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_call",
-                               side_effect=[initial, planned]) as calls, \
-             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
-             mock.patch.object(
-                MOD, "require_unchanged_ownership",
-                side_effect=[None, MOD.ContractError("ownership changed")]):
-            with self.assertRaisesRegex(MOD.ContractError, "ownership changed"):
-                MOD.prepare_runtime_update(args, FakeRunner())
-        preserve.assert_called_once()
-        self.assertEqual([call.args[2] for call in calls.call_args_list],
-                         ["inspect", "activation-recover-plan"])
-
-        recovered = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover",
-            "planSha256": planned["planSha256"],
-            "response": {"status": "recovered-inhibited"},
-        }
-        final = self.recovered_runtime_update_inspection()
-        final["artifacts"]["/bound/runtime"]["status"] = "changed"
-        with mock.patch.object(
-                MOD, "load_ownership_record", return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_call",
-                               side_effect=[initial, planned, recovered, final]), \
-             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
-             mock.patch.object(MOD, "require_unchanged_ownership"):
-            with self.assertRaisesRegex(MOD.ContractError, "artifacts differ"):
-                MOD.prepare_runtime_update(args, FakeRunner())
-
-    def test_runtime_update_rejects_unbound_recovery_plan(self):
-        args = self.runtime_update_args()
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        initial = self.runtime_update_inspection()
-        planned = self.runtime_recovery_plan(initial)
-        planned["plan"]["unexpected"] = True
-        planned["planSha256"] = digest(MOD.canonical(planned["plan"]))
-        with mock.patch.object(
-                MOD, "load_ownership_record", return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_call",
-                               side_effect=[initial, planned]) as calls, \
-             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve:
-            with self.assertRaisesRegex(MOD.ContractError, "recovery plan"):
-                MOD.prepare_runtime_update(args, FakeRunner())
-        self.assertEqual([call.args[2] for call in calls.call_args_list],
-                         ["inspect", "activation-recover-plan"])
-        preserve.assert_not_called()
 
     def test_runtime_update_rejects_dry_run_plan_without_provider_call(self):
         args = self.runtime_update_args(dry_run=True)
@@ -2248,71 +1373,6 @@ class ApplyPolicyTests(unittest.TestCase):
                 MOD.prepare_runtime_update(args, FakeRunner())
         calls.assert_not_called()
 
-    def test_activation_failure_is_archived_exactly_before_owned_cleanup(self):
-        evidence = self.root / "evidence"
-        evidence.mkdir(mode=0o700)
-        journal = self.root / "runtime-admin/activation.json"
-        journal.parent.mkdir(mode=0o700)
-        value = {"phase": "activation-failed", "requestId": "request-1234",
-                 "failure": "fixture"}
-        raw = json.dumps(value, sort_keys=True).encode() + b"\n"
-        journal.write_bytes(raw)
-        journal.chmod(0o600)
-        record = {"upstreamEvidence": str(evidence)}
-        MOD.preserve_owned_activation_journal(
-            record, "before-recovery", journal=journal)
-        self.assertTrue(journal.is_file())
-        archive = evidence / "runtime-activation-archives/before-recovery-request-1234.json"
-        archived = json.loads(archive.read_text())
-        self.assertEqual(base64.b64decode(archived["contentBase64"]), raw)
-        self.assertEqual(archived["sha256"], digest(raw))
-        MOD.preserve_owned_activation_journal(
-            record, "before-recovery", journal=journal)
-        MOD.preserve_owned_activation_journal(
-            record, "after-recovery", clear=True, journal=journal)
-        self.assertFalse(journal.exists())
-
-    def test_rollback_failure_is_archived_before_owned_recovery(self):
-        evidence = self.root / "evidence"
-        evidence.mkdir(mode=0o700)
-        journal = self.root / "runtime-admin/activation.json"
-        journal.parent.mkdir(mode=0o700)
-        value = {"phase": "rollback-failed", "requestId": "request-rollback",
-                 "failure": "fixture"}
-        raw = json.dumps(value, sort_keys=True).encode() + b"\n"
-        journal.write_bytes(raw)
-        journal.chmod(0o600)
-        MOD.preserve_owned_activation_journal(
-            {"upstreamEvidence": str(evidence)}, "before-recovery",
-            journal=journal)
-        archive = evidence / (
-            "runtime-activation-archives/before-recovery-request-rollback.json")
-        archived = json.loads(archive.read_text())
-        self.assertEqual(base64.b64decode(archived["contentBase64"]), raw)
-        self.assertEqual(archived["phase"], "rollback-failed")
-
-    def test_complete_neutral_is_terminal_owned_activation_evidence(self):
-        evidence = self.root / "evidence"
-        evidence.mkdir(mode=0o700)
-        journal = self.root / "runtime-admin/activation.json"
-        journal.parent.mkdir(mode=0o700)
-        value = {"phase": "complete-neutral", "requestId": "request-neutral"}
-        journal.write_text(json.dumps(value, sort_keys=True) + "\n")
-        journal.chmod(0o600)
-        record = {"upstreamEvidence": str(evidence)}
-        MOD.preserve_owned_activation_journal(
-            record, "before-recovery", journal=journal)
-        archive = evidence / (
-            "runtime-activation-archives/before-recovery-request-neutral.json")
-        self.assertEqual(json.loads(archive.read_text())["phase"],
-                         "complete-neutral")
-        journal.write_text(json.dumps({
-            "phase": "complete", "requestId": "request-invalid"}) + "\n")
-        journal.chmod(0o600)
-        with self.assertRaisesRegex(
-                MOD.ContractError, "not terminal owned evidence"):
-            MOD.preserve_owned_activation_journal(
-                record, "invalid", journal=journal)
 
     def responses(self, installed_version=None, dkms=""):
         dpkg = MOD.CommandResult("", "missing", 1)
@@ -2476,629 +1536,6 @@ class ApplyPolicyTests(unittest.TestCase):
         ):
             self.assertIn(path, source)
 
-    def test_owned_runtime_recovery_and_removal_reviews_both_digests(self):
-        source = self.root / "source"
-        provider = source / "scripts/runtime_provider.py"
-        provider.parent.mkdir(parents=True)
-        provider.write_text("# fixture\n")
-        binding_digest = "b" * 64
-        recovery_plan = {"bindingSha256": binding_digest}
-        activation_digest = digest(MOD.canonical(recovery_plan))
-        removal_digest = "d" * 64
-        inspected = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "recovery_required", "state": "recovery_required",
-            "routeSelected": False,
-            "identities": {"installedBinding": {
-                "status": "valid", "sha256": binding_digest,
-                "value": {"sourceCommit": "c" * 40,
-                          "artifactSetSha256": "f" * 64, "files": {}},
-            }},
-            "artifacts": {"/bound": {"status": "exact"}},
-        }
-        recovery = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover-plan", "planSha256": activation_digest,
-            "plan": recovery_plan,
-        }
-        recovered = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover", "planSha256": activation_digest,
-            "response": {"status": "recovered-inhibited"},
-        }
-        removable = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "activation_required", "state": "activation_required",
-            "routeSelected": False,
-            "modules": {"rp1_route_controller": {"status": "absent"},
-                        "rp1_gpclk_dkms": {"status": "absent"}},
-            "endpoints": {"controller": {"status": "absent"},
-                          "consumer": {"status": "absent"}},
-            "managerSocket": {"status": "absent"},
-        }
-        planned = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove-plan", "planSha256": removal_digest,
-            "destinations": sorted(MOD.runtime_deployment_destinations()),
-        }
-        removed = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove", "planSha256": removal_digest,
-            "response": {"status": "removed-exact-deployment"},
-        }
-        runner = FakeRunner({
-            ("python3", str(provider), "inspect"):
-                MOD.CommandResult(json.dumps(inspected), "", 12),
-            ("python3", str(provider), "activation-recover-plan"):
-                MOD.CommandResult(json.dumps(recovery), "", 0),
-            ("python3", str(provider), "activation-recover", "--plan-sha256", activation_digest):
-                MOD.CommandResult(json.dumps(recovered), "", 0),
-            ("python3", str(provider), "remove-plan"):
-                MOD.CommandResult(json.dumps(planned), "", 0),
-            ("python3", str(provider), "remove", "--plan-sha256", removal_digest):
-                MOD.CommandResult(json.dumps(removed), "", 0),
-        })
-        inspect_calls = 0
-        def runtime_call(runner_arg, provider_arg, operation, arguments=(), allowed_results=()):
-            nonlocal inspect_calls
-            if operation == "inspect":
-                inspect_calls += 1
-                return inspected if inspect_calls == 1 else removable
-            result = runner_arg.run(["python3", str(provider_arg), operation, *arguments], check=False)
-            return json.loads(result.stdout)
-        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
-             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
-             mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve_journal, \
-             mock.patch.object(MOD, "load_ownership_record",
-                               return_value=(record, identity, None)) as ownership, \
-             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
-            MOD.recover_and_remove_owned_runtime(
-                self.record, record, identity, runner
-            )
-        self.assertEqual(inspect_calls, 2)
-        self.assertEqual(ownership.call_count, 2)
-        self.assertEqual(preserve_journal.call_args_list, [
-            mock.call(record, "before-recovery"),
-            mock.call(record, "after-recovery", clear=True),
-        ])
-        self.assertIn(
-            ("python3", str(provider), "activation-recover", "--plan-sha256", activation_digest),
-            runner.calls,
-        )
-
-    def test_owned_runtime_migration_recovers_selected_route_first(self):
-        record = self.runtime_update_record()
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        provider = pathlib.Path(self.temp.name) / "runtime_provider.py"
-        provider.write_text("# exact fixture\n")
-        selected = self.selected_runtime_update_inspection()
-        selected["identities"]["installedBinding"]["value"]["files"] = {}
-        routed = self.route_recovered_runtime_update_inspection()
-        recovery = self.runtime_recovery_plan(routed)
-        recovered = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover",
-            "planSha256": recovery["planSha256"],
-            "response": {"status": "recovered-inhibited"},
-        }
-        removable = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "activation_required", "state": "activation_required",
-            "routeSelected": False,
-            "modules": {MOD.CONTROLLER_MODULE_NAME: {"status": "absent"},
-                        MOD.MODULE_NAME: {"status": "absent"}},
-            "endpoints": {"controller": {"status": "absent"},
-                          "consumer": {"status": "absent"}},
-            "managerSocket": {"status": "absent"},
-        }
-        removal_digest = "d" * 64
-        removal = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove-plan", "planSha256": removal_digest,
-            "destinations": sorted(MOD.runtime_deployment_destinations({})),
-        }
-        removed = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove", "planSha256": removal_digest,
-            "response": {"status": "removed-exact-deployment"},
-        }
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
-             mock.patch.object(
-                MOD, "runtime_call",
-                side_effect=[selected, routed, recovery, recovered, removable,
-                             removal, removed]) as calls, \
-             mock.patch.object(
-                MOD, "recover_selected_runtime_route_for_update",
-                return_value=routed) as route_recover, \
-             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
-             mock.patch.object(
-                MOD, "load_ownership_record",
-                return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
-            MOD.recover_and_remove_owned_runtime(
-                self.record, record, identity, FakeRunner(), provider
-            )
-        route_recover.assert_called_once_with(
-            self.record, record, identity, selected, mock.ANY
-        )
-        self.assertEqual(
-            [call.args[2] for call in calls.call_args_list],
-            ["inspect", "inspect", "activation-recover-plan", "activation-recover",
-             "inspect", "remove-plan", "remove"],
-        )
-
-    def test_owned_post_reboot_runtime_uses_installed_provider_to_retire_then_remove(self):
-        source = self.root / "source"
-        source.mkdir()
-        (source / "runtime_provider.py").write_text("# incompatible candidate fixture\n")
-        provider = self.root / "installed/runtime_provider.py"
-        provider.parent.mkdir(parents=True)
-        provider.write_text("# authenticated installed provider fixture\n")
-        binding_digest = "b" * 64
-        artifact_digest = "f" * 64
-        journal_digest = "a" * 64
-        retirement_plan = {
-            "version": 2, "operation": "retire-post-reboot-activation",
-            "bindingSha256": binding_digest,
-            "artifactSetSha256": artifact_digest,
-            "bootId": "00000000-0000-0000-0000-000000000002",
-            "lastDeploymentSha256": "1" * 64,
-            "activationJournalSha256": journal_digest,
-            "applicationIdleSha256": None,
-            "transactionJournalSha256": {
-                "transaction.json": None, "manager.json": None,
-                "application.json": None,
-            },
-        }
-        retirement_digest = digest(MOD.canonical(retirement_plan))
-        removal_digest = "d" * 64
-        initial = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "activation_required", "state": "activation_required",
-            "routeSelected": False,
-            "identities": {"installedBinding": {
-                "status": "valid", "sha256": binding_digest,
-                "value": {"sourceCommit": "c" * 40,
-                          "artifactSetSha256": artifact_digest, "files": {}},
-            }},
-            "artifacts": {"/bound": {"status": "exact"}},
-            "journals": {"activation.json": {"status": "present",
-                "value": {"phase": "complete-neutral"}}},
-            "modules": {"rp1_route_controller": {"status": "absent"},
-                        "rp1_gpclk_dkms": {"status": "absent"}},
-            "endpoints": {"controller": {"status": "absent"},
-                          "consumer": {"status": "absent"}},
-            "managerSocket": {"status": "absent"},
-            "reboot": {"occurred": True, "required": False},
-        }
-        removable = dict(initial)
-        removable["journals"] = {"activation.json": {"status": "absent"}}
-        retirement = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-retire-plan",
-            "planSha256": retirement_digest, "plan": retirement_plan,
-        }
-        retired = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-retire", "planSha256": retirement_digest,
-            "response": {"status": "retired-post-reboot-activation",
-                         "activationJournalSha256": journal_digest},
-        }
-        planned = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove-plan", "planSha256": removal_digest,
-            "destinations": sorted(MOD.runtime_deployment_destinations()),
-        }
-        removed = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove", "planSha256": removal_digest,
-            "response": {"status": "removed-exact-deployment"},
-        }
-        replies = iter((initial, retirement, retired, removable, planned, removed))
-        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        operations = []
-        def runtime_call(unused_runner, provider_arg, operation,
-                         arguments=(), allowed_results=()):
-            self.assertEqual(provider_arg, provider)
-            operations.append(operation)
-            return next(replies)
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
-             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
-             mock.patch.object(MOD, "preserve_owned_activation_journal",
-                               side_effect=lambda *unused: operations.append("preserve")) as preserve, \
-             mock.patch.object(MOD, "load_ownership_record",
-                               return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
-            MOD.recover_and_remove_owned_runtime(
-                self.record, record, identity, FakeRunner()
-            )
-        self.assertEqual(operations, ["inspect", "activation-retire-plan",
-            "preserve", "activation-retire", "inspect", "remove-plan", "remove"])
-        preserve.assert_called_once_with(record, "before-retirement")
-
-    def test_owned_cross_boot_route_journals_use_reviewed_candidate_retirement(self):
-        self.check_candidate_retirement("recovery_required")
-
-    def test_owned_cross_boot_migration_accepts_candidate_reboot_admission(self):
-        self.check_candidate_retirement("activation_required")
-
-    def check_candidate_retirement(self, candidate_result):
-        installed = self.root / "installed/runtime_provider.py"
-        installed.parent.mkdir(parents=True)
-        installed.write_text("# installed provider without journal retirement\n")
-        candidate = self.root / "source/scripts/runtime_provider.py"
-        candidate.parent.mkdir(parents=True)
-        candidate.write_text("# reviewed candidate provider\n")
-        binding_digest, artifact_digest = "b" * 64, "f" * 64
-        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
-        base = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "recovery_required", "state": "recovery_required",
-            "routeSelected": False,
-            "identities": {"installedBinding": {"status": "valid",
-                "sha256": binding_digest, "value": {
-                    "sourceCommit": record["sourceCommit"],
-                    "artifactSetSha256": artifact_digest, "files": {}}}},
-            "artifacts": {"/bound": {"status": "exact"}},
-            "journals": {"activation.json": {"status": "present",
-                "value": {"phase": "complete-neutral"}}},
-            "modules": {"rp1_route_controller": {"status": "absent"},
-                        "rp1_gpclk_dkms": {"status": "absent"}},
-            "endpoints": {"controller": {"status": "absent"},
-                          "consumer": {"status": "absent"}},
-            "managerSocket": {"status": "absent"},
-            "reboot": {"occurred": True, "required": False},
-        }
-        plan = {"version": 2, "operation": "retire-post-reboot-activation",
-            "bindingSha256": binding_digest, "artifactSetSha256": artifact_digest,
-            "bootId": "00000000-0000-0000-0000-000000000002",
-            "lastDeploymentSha256": "1" * 64,
-            "activationJournalSha256": "a" * 64,
-            "applicationIdleSha256": "5" * 64,
-            "transactionJournalSha256": {
-                "transaction.json": "2" * 64, "manager.json": "3" * 64,
-                "application.json": "4" * 64}}
-        plan_digest = digest(MOD.canonical(plan))
-        retirement = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-retire-plan", "planSha256": plan_digest,
-            "plan": plan}
-        retired = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-retire", "planSha256": plan_digest,
-            "response": {"status": "retired-post-reboot-activation",
-                         "activationJournalSha256": "a" * 64}}
-        removable = dict(base)
-        removable.update(result="activation_required", state="activation_required")
-        removable["journals"] = {"activation.json": {"status": "absent"}}
-        removal_digest = "d" * 64
-        removal = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove-plan", "planSha256": removal_digest,
-            "destinations": sorted(MOD.runtime_deployment_destinations())}
-        removed = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove", "planSha256": removal_digest,
-            "response": {"status": "removed-exact-deployment"}}
-        admitted = dict(base, result=candidate_result, state=candidate_result)
-        replies = iter((base, admitted, retirement, retired, removable, removal, removed))
-        providers = []
-        def runtime_call(unused_runner, provider_arg, operation,
-                         arguments=(), allowed_results=()):
-            providers.append((operation, provider_arg))
-            value = next(replies)
-            if operation == "inspect" and provider_arg == candidate:
-                self.assertIn(value["result"], allowed_results)
-            return value
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed), \
-             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
-             mock.patch.object(MOD, "preserve_owned_activation_journal"), \
-             mock.patch.object(MOD, "load_ownership_record",
-                               return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
-            MOD.recover_and_remove_owned_runtime(
-                self.record, record, identity, FakeRunner(), candidate)
-        self.assertEqual(providers[0], ("inspect", installed))
-        self.assertTrue(all(provider == candidate for _, provider in providers[1:]))
-
-    def test_owned_same_boot_activation_or_route_recovery_uses_reviewed_candidate(self):
-        installed = self.root / "installed/runtime_provider.py"
-        installed.parent.mkdir(parents=True)
-        installed.write_text("# installed provider without journal recovery\n")
-        candidate = self.root / "source/scripts/runtime_provider.py"
-        candidate.parent.mkdir(parents=True)
-        candidate.write_text("# reviewed candidate provider\n")
-        binding_digest, artifact_digest = "b" * 64, "f" * 64
-        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
-        failed = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "recovery_required", "state": "recovery_required",
-            "routeSelected": False,
-            "identities": {"installedBinding": {"status": "valid",
-                "sha256": binding_digest, "value": {
-                    "sourceCommit": record["sourceCommit"],
-                    "artifactSetSha256": artifact_digest, "files": {}}}},
-            "artifacts": {"/bound": {"status": "exact"}},
-            "journals": {"activation.json": {"status": "present",
-                "value": {"phase": "rollback-failed"}}},
-        }
-        recovery_plan = {"bindingSha256": binding_digest}
-        recovery_digest = digest(MOD.canonical(recovery_plan))
-        recovery = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover-plan",
-            "planSha256": recovery_digest, "plan": recovery_plan}
-        recovered = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "activation-recover", "planSha256": recovery_digest,
-            "response": {"status": "recovered-inhibited"}}
-        removable = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "activation_required", "state": "activation_required",
-            "routeSelected": False,
-            "modules": {"rp1_route_controller": {"status": "absent"},
-                        "rp1_gpclk_dkms": {"status": "absent"}},
-            "endpoints": {"controller": {"status": "absent"},
-                          "consumer": {"status": "absent"}},
-            "managerSocket": {"status": "absent"},
-        }
-        removal_digest = "d" * 64
-        removal = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove-plan", "planSha256": removal_digest,
-            "destinations": sorted(MOD.runtime_deployment_destinations())}
-        removed = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove", "planSha256": removal_digest,
-            "response": {"status": "removed-exact-deployment"}}
-        conflict = copy.deepcopy(failed)
-        conflict.update(result="conflict", state="conflict",
-                        conflicts=["loaded-controller-without-completed-activation"])
-        conflict["journals"]["activation.json"]["value"]["phase"] = (
-            "complete-neutral")
-        route_recovered = copy.deepcopy(failed)
-        route_recovered["journals"]["activation.json"]["value"]["phase"] = (
-            "complete-neutral")
-        for initial in (failed, conflict, route_recovered):
-            with self.subTest(result=initial["result"]):
-                candidate_interpretation = copy.deepcopy(initial)
-                if initial["result"] == "conflict":
-                    candidate_interpretation.update(
-                        result="recovery_required", state="recovery_required",
-                        conflicts=[])
-                elif initial is route_recovered:
-                    candidate_interpretation.update(
-                        result="neutral_ready", state="neutral_ready")
-                replies = iter((initial, candidate_interpretation, recovery,
-                                recovered, removable, removal, removed))
-                providers = []
-                allowed_result_sets = []
-                def runtime_call(unused_runner, provider_arg, operation,
-                                 arguments=(), allowed_results=()):
-                    providers.append((operation, provider_arg))
-                    allowed_result_sets.append((operation, set(allowed_results)))
-                    return next(replies)
-                identity = mock.Mock(st_dev=1, st_ino=2)
-                with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed), \
-                     mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
-                     mock.patch.object(MOD, "preserve_owned_activation_journal") as preserve, \
-                     mock.patch.object(MOD, "load_ownership_record",
-                                       return_value=(record, identity, None)), \
-                     mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
-                    MOD.recover_and_remove_owned_runtime(
-                        self.record, record, identity, FakeRunner(), candidate)
-                self.assertEqual(providers[0], ("inspect", installed))
-                self.assertTrue(all(provider == candidate
-                                    for _, provider in providers[1:]))
-                self.assertEqual([operation for operation, _ in providers], [
-                    "inspect", "inspect", "activation-recover-plan",
-                    "activation-recover", "inspect", "remove-plan", "remove",
-                ])
-                self.assertEqual(
-                    allowed_result_sets[1],
-                    ("inspect", {"recovery_required", "neutral_ready"}),
-                )
-                self.assertEqual(preserve.call_args_list, [
-                    mock.call(record, "before-recovery"),
-                    mock.call(record, "after-recovery", clear=True),
-                ])
-        different = copy.deepcopy(conflict)
-        different["conflicts"] = ["artifact-conflict:/foreign"]
-        providers = []
-        def different_runtime_call(unused_runner, provider_arg, operation,
-                                   arguments=(), allowed_results=()):
-            providers.append(provider_arg)
-            return different
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", installed), \
-             mock.patch.object(MOD, "runtime_call",
-                               side_effect=different_runtime_call), \
-             mock.patch.object(MOD, "load_ownership_record",
-                               return_value=(record, identity, None)):
-            with self.assertRaises(MOD.ContractError):
-                MOD.recover_and_remove_owned_runtime(
-                    self.record, record, identity, FakeRunner(), candidate)
-        self.assertEqual(providers, [installed])
-
-    def test_pre_uninstall_recovered_runtime_removes_without_retirement(self):
-        provider = self.root / "installed/runtime_provider.py"
-        provider.parent.mkdir(parents=True)
-        provider.write_text("# authenticated installed provider fixture\n")
-        binding_digest = "b" * 64
-        artifact_digest = "f" * 64
-        removal_digest = "d" * 64
-        inspected = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "activation_required", "state": "activation_required",
-            "routeSelected": False,
-            "identities": {"installedBinding": {
-                "status": "valid", "sha256": binding_digest,
-                "value": {"sourceCommit": "c" * 40,
-                          "artifactSetSha256": artifact_digest, "files": {}},
-            }},
-            "artifacts": {"/bound": {"status": "exact"}},
-            "journals": {"activation.json": {"status": "present",
-                "value": {"phase": "recovered-inhibited"}}},
-            "modules": {"rp1_route_controller": {"status": "absent"},
-                        "rp1_gpclk_dkms": {"status": "absent"}},
-            "endpoints": {"controller": {"status": "absent"},
-                          "consumer": {"status": "absent"}},
-            "managerSocket": {"status": "absent"},
-        }
-        planned = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove-plan", "planSha256": removal_digest,
-            "destinations": sorted(MOD.runtime_deployment_destinations()),
-        }
-        removed = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove", "planSha256": removal_digest,
-            "response": {"status": "removed-exact-deployment"},
-        }
-        replies = iter((inspected, planned, removed))
-        operations = []
-        def runtime_call(unused_runner, provider_arg, operation,
-                         arguments=(), allowed_results=()):
-            self.assertEqual(provider_arg, provider)
-            operations.append(operation)
-            return next(replies)
-        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
-             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
-             mock.patch.object(MOD, "validate_inactive_runtime_update_state") as validate, \
-             mock.patch.object(MOD, "load_ownership_record",
-                               return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
-            MOD.recover_and_remove_owned_runtime(
-                self.record, record, identity, FakeRunner()
-            )
-        validate.assert_called_once_with(inspected, recovered=True)
-        self.assertEqual(operations, ["inspect", "remove-plan", "remove"])
-
-    def test_unowned_runtime_never_enters_candidate_migration(self):
-        source = self.root / "source"
-        source.mkdir()
-        resolved = {
-            "checkout": {"path": str(source)}, "interface": "route-neutral-flag",
-            "routeArguments": ["--route-neutral"], "commit": "a" * 40,
-            "version": "0.9.0", "sourceTree": "b" * 40,
-            "uapiSha256": "c" * 64,
-            "versionSource": "include/rp1_gpclk/version.h",
-            "versionSourceSha256": "d" * 64,
-        }
-        inventory = {
-            "packageVersion": None, "dkms": "foreign", "activeModule": True,
-            "activeController": False, "configuredRoute": False,
-            "sourceTrees": ["/usr/src/rp1-gpclk-dkms-0.9.0"],
-            "moduleCandidates": ["/lib/modules/kernel/rp1_gpclk_dkms.ko"],
-            "controllerCandidates": ["/lib/modules/kernel/rp1_route_controller.ko"],
-            "installedOverlays": [], "enrollment": False,
-            "developmentManager": False,
-            "runtimeResidue": ["/var/lib/rp1-gpclk-dkms/runtime-admin"],
-        }
-        with mock.patch.object(MOD, "revalidate_checkout", return_value=source), \
-             mock.patch.object(MOD, "route_neutral_interface",
-                               return_value=("route-neutral-flag", ["--route-neutral"])), \
-             mock.patch.object(MOD, "existing_inventory", return_value=inventory), \
-             mock.patch.object(MOD, "load_ownership_record",
-                               return_value=(None, None, "no WsprryPi ownership record exists")), \
-             mock.patch.object(MOD, "recover_and_remove_owned_runtime") as recover:
-            with self.assertRaisesRegex(MOD.ContractError, "runtime-controller residue"):
-                MOD.apply_development(resolved, self.record, FakeRunner())
-        recover.assert_not_called()
-
-    def test_owned_runtime_removal_rejects_binding_mismatch_before_mutation(self):
-        source = self.root / "source"
-        provider = source / "scripts/runtime_provider.py"
-        provider.parent.mkdir(parents=True)
-        provider.write_text("# fixture\n")
-        inspected = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "activation_required", "state": "activation_required",
-            "identities": {"installedBinding": {"status": "valid", "sha256": "b" * 64,
-                "value": {"sourceCommit": "e" * 40, "files": {}}}},
-            "artifacts": {"/bound": {"status": "exact"}},
-        }
-        runner = FakeRunner({
-            ("python3", str(provider), "inspect"):
-                MOD.CommandResult(json.dumps(inspected), "", 14),
-        })
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider):
-            with self.assertRaisesRegex(MOD.ContractError, "binding differs"):
-                MOD.recover_and_remove_owned_runtime(
-                    self.record,
-                    {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
-                    mock.Mock(st_dev=1, st_ino=2), runner,
-                )
-        self.assertEqual(len(runner.calls), 1)
-
-    def test_ordinary_removal_retains_installed_provider_entrypoint(self):
-        provider = self.root / "installed/runtime_provider.py"
-        provider.parent.mkdir(parents=True)
-        provider.write_text("# installed provider fixture\n")
-        inspected = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "activation_required", "state": "activation_required",
-            "routeSelected": False,
-            "identities": {"installedBinding": {"status": "valid",
-                "sha256": "b" * 64, "value": {"sourceCommit": "c" * 40,
-                "artifactSetSha256": "f" * 64, "files": {}}}},
-            "artifacts": {"/bound": {"status": "exact"}},
-            "journals": {"activation.json": {"status": "absent"}},
-            "modules": {"rp1_route_controller": {"status": "absent"},
-                        "rp1_gpclk_dkms": {"status": "absent"}},
-            "endpoints": {"controller": {"status": "absent"},
-                          "consumer": {"status": "absent"}},
-            "managerSocket": {"status": "absent"},
-        }
-        planned = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove-plan", "planSha256": "d" * 64,
-            "destinations": sorted(MOD.runtime_deployment_destinations())}
-        removed = {"contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "operation": "remove", "planSha256": "d" * 64,
-            "response": {"status": "removed-exact-deployment"}}
-        replies = iter((inspected, planned, removed))
-        called = []
-        def runtime_call(unused_runner, provider_arg, operation,
-                         arguments=(), allowed_results=()):
-            called.append((provider_arg, operation))
-            return next(replies)
-        record = {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40}
-        identity = mock.Mock(st_dev=1, st_ino=2)
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider), \
-             mock.patch.object(MOD, "runtime_call", side_effect=runtime_call), \
-             mock.patch.object(MOD, "load_ownership_record",
-                               return_value=(record, identity, None)), \
-             mock.patch.object(MOD, "runtime_residue_inventory", return_value=[]):
-            MOD.recover_and_remove_owned_runtime(
-                self.record, record, identity, FakeRunner())
-        self.assertEqual(called, [(provider, "inspect"),
-                                  (provider, "remove-plan"),
-                                  (provider, "remove")])
-
-    def test_owned_runtime_removal_rejects_incomplete_absence_evidence(self):
-        source = self.root / "source"
-        provider = source / "scripts/runtime_provider.py"
-        provider.parent.mkdir(parents=True)
-        provider.write_text("# fixture\n")
-        inspected = {
-            "contract": MOD.RUNTIME_READINESS_CONTRACT,
-            "result": "activation_required", "state": "activation_required",
-            "routeSelected": False,
-            "identities": {"installedBinding": {"status": "valid", "sha256": "b" * 64,
-                "value": {"sourceCommit": "c" * 40, "files": {}}}},
-            "artifacts": {"/bound": {"status": "exact"}},
-            "modules": {}, "endpoints": {}, "managerSocket": {"status": "absent"},
-        }
-        runner = FakeRunner({
-            ("python3", str(provider), "inspect"):
-                MOD.CommandResult(json.dumps(inspected), "", 14),
-        })
-        with mock.patch.object(MOD, "RUNTIME_PROVIDER", provider):
-            with self.assertRaisesRegex(MOD.ContractError, "not eligible"):
-                MOD.recover_and_remove_owned_runtime(
-                    self.record,
-                    {"schema": MOD.RECORD_SCHEMA, "sourceCommit": "c" * 40},
-                    mock.Mock(st_dev=1, st_ino=2), runner,
-                )
-        self.assertEqual(len(runner.calls), 1)
 
     def test_runtime_bundle_requires_self_contained_bootstrap_and_bound_units(self):
         bundle = self.root / "bundle"
@@ -3229,17 +1666,10 @@ class ApplyPolicyTests(unittest.TestCase):
             "planSha256": "e" * 64, "bindingSha256": "f" * 64,
             "artifactSetSha256": "b" * 64,
         }
-        final = readiness("neutral_ready")
-        final.update({
-            "administrationEligible": True, "executionReady": False,
-            "routeSelected": False,
-            "routes": {name: None for name in ("requested", "configured", "persisted", "active")},
-            "safety": {"outputInhibited": False, "operationalReady": False,
-                       "owner": False, "lease": False},
-            "identities": {"installedBinding": {"sha256": "f" * 64,
-                "value": {"artifactSetSha256": "b" * 64}}},
-            "activation": {"value": {"controllerState": {"session": 42, "generation": 0}}},
-        })
+        receipt = self.runtime_update_record()["runtime"]
+        receipt.update(bindingSha256="f" * 64, artifactSetSha256="b" * 64)
+        final = {"schemaVersion": 1, "contract": MOD.RUNTIME_UPDATE_CONTRACT,
+                 "operation": "installation-status", "status": "neutral_ready", "receipt": receipt}
         replies = [
             readiness("absent"), deployment, {"operation": "ensure"},
             readiness("activation_required"), activation,
@@ -3260,6 +1690,7 @@ class ApplyPolicyTests(unittest.TestCase):
                  "artifactSetSha256": "b" * 64,
              })), \
              mock.patch.object(MOD, "runtime_call", side_effect=replies) as calls, \
+             mock.patch.object(MOD, "validate_development_rollback_authority"), \
              mock.patch.object(MOD, "replace_owned_record", side_effect=replace):
             MOD.activate_runtime(args, FakeRunner())
         self.assertEqual(calls.call_count, 7)
@@ -3271,6 +1702,7 @@ class ApplyPolicyTests(unittest.TestCase):
         self.assertEqual(runtime["controllerGeneration"], 0)
         self.assertIsNone(runtime["route"])
         self.assertEqual(runtime["output"], "disabled")
+
 
     def test_selected_shell_dry_run_never_invokes_python_or_resolution_tools(self):
         install_script = ROOT / "scripts" / "install.sh"

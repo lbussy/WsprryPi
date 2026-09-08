@@ -660,7 +660,7 @@ def download_release(state_dir: pathlib.Path, client: GitHubClient, runner: Runn
     checkout = clone_exact(state_dir, "commit", tag_commit, runner)
     source = pathlib.Path(checkout["path"])
     require_compatible_runtime_source(source, tag_commit, runner)
-    runtime_source_interface(source)
+    runtime_source_interface(source, runner)
     upstream_identity = development_identity(source, runner)
     require(
         upstream_identity["version"] == manifest["productVersion"],
@@ -786,7 +786,7 @@ def route_neutral_interface(source: pathlib.Path, runner: Runner) -> tuple[str, 
     raise ContractError("upstream development-install has no reviewed route-neutral installation interface; no development mutation was attempted")
 
 
-def runtime_source_interface(source: pathlib.Path) -> None:
+def runtime_source_interface(source: pathlib.Path, runner: Runner) -> None:
     required = (
         "Makefile",
         "scripts/build_runtime_bundle.py",
@@ -805,6 +805,12 @@ def runtime_source_interface(source: pathlib.Path) -> None:
     for relative in required:
         path = source / relative
         require(path.is_file() and not path.is_symlink(), f"selected source lacks runtime administration input: {relative}")
+    # Probe the selected source itself before any package or application effect.
+    provider = source / "scripts/runtime_provider.py"
+    reply = runner.run(["python3", str(provider), "capabilities"], check=False)
+    require(reply.returncode == 0,
+            "selected source lacks rp1-gpclk-runtime-update-v1; choose a compatible provider source")
+    validate_runtime_update_capabilities(reply)
 
 
 def runtime_source_identity(source: pathlib.Path, product: str) -> None:
@@ -863,7 +869,7 @@ def prepare_development(state_dir: pathlib.Path, selector: str, value: str | Non
     uapi = source / "include" / "uapi" / "linux" / "rp1_gpclk.h"
     require(uapi.is_file() and not uapi.is_symlink(), "development source lacks the canonical regular-file UAPI")
     interface, route_args = route_neutral_interface(source, runner)
-    runtime_source_interface(source)
+    runtime_source_interface(source, runner)
     upstream_identity = development_identity(source, runner)
     runtime_source_identity(source, upstream_identity["version"])
     return {
@@ -1087,93 +1093,6 @@ def runtime_deployment_destinations(files: Iterable[str] = ()) -> set[str]:
     }
 
 
-def preserve_owned_activation_journal(record: Mapping[str, Any], label: str,
-                                      clear: bool = False,
-                                      journal: pathlib.Path = pathlib.Path(
-                                          "/var/lib/rp1-gpclk-dkms/runtime-admin/activation.json")) -> None:
-    """Archive exact activation evidence, then clear it for owned deployment inversion."""
-    if not journal.exists() and not journal.is_symlink():
-        return
-    try:
-        info = journal.lstat()
-        require(stat.S_ISREG(info.st_mode),
-                "runtime activation journal is missing or substituted")
-        descriptor = os.open(journal, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        try:
-            opened = os.fstat(descriptor)
-            require((opened.st_dev, opened.st_ino) == (info.st_dev, info.st_ino)
-                    and opened.st_uid == os.geteuid()
-                    and stat.S_IMODE(opened.st_mode) & 0o077 == 0,
-                    "runtime activation journal ownership or mode differs")
-            with os.fdopen(descriptor, "rb", closefd=False) as stream:
-                raw = stream.read(MAX_METADATA_BYTES + 1)
-        finally:
-            os.close(descriptor)
-    except OSError as error:
-        raise ContractError("runtime activation journal is unavailable") from error
-    require(len(raw) <= MAX_METADATA_BYTES,
-            "runtime activation journal exceeds read bound")
-    try:
-        value = json.loads(raw)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ContractError("runtime activation journal is unreadable") from error
-    phase = value.get("phase") if isinstance(value, dict) else None
-    require(phase in {"activation-failed", "rollback-failed",
-                      "recovered-inhibited", "complete-neutral"},
-            "runtime activation journal is not terminal owned evidence")
-    request_id = value.get("requestId")
-    require(isinstance(request_id, str)
-            and re.fullmatch(r"[A-Za-z0-9._-]{8,128}", request_id) is not None,
-            "runtime activation journal request identity is invalid")
-    evidence_value = record.get("upstreamEvidence")
-    evidence = (pathlib.Path(evidence_value) if isinstance(evidence_value, str)
-                else pathlib.Path("/var/lib/wsprrypi/rp1-gpclk-dkms-runtime-evidence"))
-    if not evidence.exists() and record.get("channel") == "release":
-        evidence.mkdir(mode=0o700)
-    require(evidence.is_absolute() and evidence.is_dir() and not evidence.is_symlink(),
-            "runtime ownership evidence is unavailable")
-    archive = evidence / "runtime-activation-archives"
-    archive.mkdir(mode=0o700, exist_ok=True)
-    require(archive.is_dir() and not archive.is_symlink()
-            and archive.stat().st_uid == os.geteuid()
-            and stat.S_IMODE(archive.stat().st_mode) & 0o077 == 0,
-            "runtime activation archive directory is unsafe")
-    destination = archive / f"{label}-{request_id}.json"
-    archived = {
-        "schema": "wsprrypi-rp1-gpclk-activation-archive-v1",
-        "phase": phase,
-        "requestId": request_id,
-        "sha256": sha256_bytes(raw),
-        "contentBase64": base64.b64encode(raw).decode("ascii"),
-    }
-    if destination.exists() or destination.is_symlink():
-        require(destination.is_file() and not destination.is_symlink(),
-                "runtime activation archive is substituted")
-        try:
-            existing = json.loads(destination.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ContractError("runtime activation archive is unreadable") from error
-        require(existing == archived, "runtime activation archive identity differs")
-    else:
-        atomic_json_new(destination, archived)
-    current = journal.lstat()
-    require(stat.S_ISREG(current.st_mode)
-            and (current.st_dev, current.st_ino) == (info.st_dev, info.st_ino),
-            "runtime activation journal changed during preservation")
-    descriptor = os.open(journal, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            current_raw = stream.read(MAX_METADATA_BYTES + 1)
-    finally:
-        os.close(descriptor)
-    require(current_raw == raw, "runtime activation journal changed during preservation")
-    if clear:
-        journal.unlink()
-        parent_descriptor = os.open(journal.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(parent_descriptor)
-        finally:
-            os.close(parent_descriptor)
 
 
 def remove_ownership_record(path: pathlib.Path, expected: os.stat_result) -> None:
@@ -1596,114 +1515,45 @@ def validate_runtime_development_provider(
 def validate_resumable_neutral_activation(
     record: Mapping[str, Any], inventory: Mapping[str, Any], runner: Runner
 ) -> dict[str, Any]:
-    """Admit only the exact fail-closed checkpoint before v3 record promotion."""
-    validate_development_rollback_authority(record, pathlib.Path("/"))
-    require(inventory.get("activeController") is True,
-            "interrupted runtime activation lacks an active controller")
-    inspected = validate_readiness(
-        runtime_call(runner, RUNTIME_PROVIDER, "inspect", (),
-                     {"neutral_ready", "conflict"})
-    )
-    binding = inspected.get("identities", {}).get("installedBinding", {})
-    value = binding.get("value", {}) if isinstance(binding, dict) else {}
-    expected_compatibility = {
-        "gpio4": f"v{record['productVersion']}-rp1-gpio4",
-        "gpio20": f"v{record['productVersion']}-rp1-gpio20",
-    }
-    require(
-        binding.get("status") == "valid"
-        and isinstance(binding.get("sha256"), str)
-        and SHA256.fullmatch(binding["sha256"])
-        and value.get("sourceCommit") == record["sourceCommit"]
-        and value.get("productVersion") == record["productVersion"]
-        and value.get("kernel") == platform.release()
-        and value.get("compatibilityIdentities") == expected_compatibility,
-        "interrupted runtime activation binding differs from provider ownership",
-    )
-    artifacts = inspected.get("artifacts")
-    routes = inspected.get("routes")
-    modules = inspected.get("modules", {})
-    endpoints = inspected.get("endpoints", {})
-    activation = inspected.get("activation", {}).get("value", {})
-    controller = activation.get("controllerState", {})
-    manager = inspected.get("manager", {}).get("query", {}).get("state", {})
-    journal = inspected.get("journals", {}).get("activation.json", {})
-    safety = inspected.get("safety", {})
-    result = inspected.get("result")
-    require(
-        ((result == "neutral_ready"
-          and inspected.get("administrationEligible") is True)
-         or (result == "conflict"
-             and inspected.get("administrationEligible") is False))
-        and inspected.get("routeSelected") is False
-        and inspected.get("executionReady") is False
-        and isinstance(artifacts, dict) and artifacts
-        and all(isinstance(item, dict) and item.get("status") == "exact"
-                for item in artifacts.values())
-        and isinstance(routes, dict)
-        and set(routes) == {"requested", "configured", "persisted", "active"}
-        and all(routes[name] is None for name in routes)
-        and modules.get(CONTROLLER_MODULE_NAME, {}).get("status") == "loaded"
-        and modules.get(MODULE_NAME, {}).get("status") == "absent"
-        and endpoints.get("controller", {}).get("status") == "owned"
-        and endpoints.get("controller", {}).get("open") is False
-        and endpoints.get("consumer", {}).get("status") == "absent"
-        and endpoints.get("consumer", {}).get("open") is False
-        and isinstance(controller, dict)
-        and type(controller.get("session")) is int
-        and controller["session"] > 0
-        and not any(controller.get(name) for name in
-                    ("generation", "id", "error", "route", "flags"))
-        and isinstance(manager, dict)
-        and manager.get("activeRoute") is None
-        and manager.get("configuredRoute") is None
-        and manager.get("outputEnabled") is False
-        and journal.get("status") == "present"
-        and journal.get("value", {}).get("phase") == "complete-neutral"
-        and isinstance(journal.get("value", {}).get("requestId"), str)
-        and len(journal["value"]["requestId"]) >= 8
-        and isinstance(journal.get("value", {}).get("planSha256"), str)
-        and SHA256.fullmatch(journal["value"]["planSha256"])
-        and isinstance(activation.get("artifactSetSha256"), str)
-        and SHA256.fullmatch(activation["artifactSetSha256"])
-        and activation.get("artifactSetSha256") == value.get("artifactSetSha256")
-        and isinstance(activation.get("lastDeploymentSha256"), str)
-        and SHA256.fullmatch(activation["lastDeploymentSha256"]),
-        "interrupted runtime activation is not exact neutral state",
-    )
-    if result == "conflict":
-        require(
-            inspected.get("conflicts") ==
-                ["loaded-controller-without-completed-activation"],
-            "interrupted runtime activation has a non-resumable conflict",
-        )
-        validate_runtime_update_retry_conflict(inspected, journal["value"])
-    else:
-        require(
-            not inspected.get("conflicts")
-            and safety.get("clock") == "quiescent"
-            and safety.get("dma") == "quiescent"
-            and safety.get("gpio") == "quiescent"
-            and safety.get("endpointOpen") is False
-            and safety.get("owner") is False
-            and safety.get("lease") is False,
-            "interrupted runtime activation lacks quiescent safety evidence",
-        )
-    return {
-        "readinessContract": RUNTIME_READINESS_CONTRACT,
-        "bindingSha256": binding["sha256"],
-        "artifactSetSha256": activation["artifactSetSha256"],
-        "sourceCommit": record["sourceCommit"],
-        "productVersion": record["productVersion"],
-        "targetKernel": platform.release(),
-        "compatibilityIdentities": expected_compatibility,
-        "deploymentPlanSha256": activation["lastDeploymentSha256"],
-        "activationPlanSha256": journal["value"]["planSha256"],
-        "activationRequestId": journal["value"]["requestId"],
-        "controllerSession": controller["session"],
-        "controllerGeneration": controller["generation"],
-        "state": "neutral_ready", "route": None, "output": "disabled",
-    }
+    """Read provider-issued provenance rather than interpreting its journals."""
+    if record.get("channel") == "development":
+        validate_development_rollback_authority(record, pathlib.Path("/"))
+    value = runtime_call(runner, RUNTIME_PROVIDER, "installation-status")
+    require(type(value.get("schemaVersion")) is int
+            and value.get("schemaVersion") == 1
+            and value.get("contract") == RUNTIME_UPDATE_CONTRACT
+            and value.get("operation") == "installation-status"
+            and value.get("status") == "neutral_ready",
+            "runtime installation receipt is unavailable or incompatible")
+    return validate_runtime_ownership(value.get("receipt"), record)
+
+
+
+RUNTIME_UPDATE_CONTRACT = "rp1-gpclk-runtime-update-v1"
+
+
+def validate_runtime_update_capabilities(reply: CommandResult) -> None:
+    capabilities = json_result(reply, "runtime update capabilities")
+    require(type(capabilities.get("schemaVersion")) is int
+            and capabilities.get("schemaVersion") == 1
+            and capabilities.get("contract") == RUNTIME_UPDATE_CONTRACT
+            and capabilities.get("operation") == "capabilities"
+            and isinstance(capabilities.get("capabilities"), list)
+            and {"update-plan", "update-execute", "installation-status"}.issubset(capabilities["capabilities"]),
+            "runtime update interface is incompatible; upgrade the provider")
+
+
+def runtime_update_provider(runner: Runner, candidate: pathlib.Path | None = None) -> pathlib.Path:
+    """Negotiate a public interface; the provider owns predecessor compatibility."""
+    for provider in dict.fromkeys(path for path in (RUNTIME_PROVIDER, candidate) if path is not None):
+        if not provider.is_file() or provider.is_symlink():
+            continue
+        reply = runner.run(["python3", str(provider), "capabilities"], check=False)
+        if reply.returncode != 0:
+            continue
+        validate_runtime_update_capabilities(reply)
+        return provider
+    raise ContractError("Provider lacks rp1-gpclk-runtime-update-v1; use an exact compatible provider source before updating or removing the application")
 
 
 def recover_and_remove_owned_runtime(
@@ -1713,287 +1563,59 @@ def recover_and_remove_owned_runtime(
     runner: Runner,
     migration_provider: pathlib.Path | None = None,
 ) -> None:
-    # The installed runtime first interprets its own binding. A reviewed
-    # candidate may become authority only for an exact failed-journal recovery
-    # or cross-boot retirement case that an older provider cannot represent.
-    provider = RUNTIME_PROVIDER
-    require(provider.is_file() and not provider.is_symlink(),
-            "runtime provider is missing or substituted")
-    inspected = validate_readiness(runtime_call(
-        runner, provider, "inspect", (),
-        {"exact_ready", "activation_required", "recovery_required", "neutral_ready", "conflict"},
-    ))
-    binding = inspected.get("identities", {}).get("installedBinding", {})
-    binding_value = binding.get("value", {}) if isinstance(binding, dict) else {}
-    require(
-        binding.get("status") == "valid"
-        and binding_value.get("sourceCommit") == record.get("sourceCommit"),
-        "installed runtime binding differs from WsprryPi provider ownership",
-    )
-    if record.get("schema") == RUNTIME_RECORD_SCHEMA:
-        runtime = validate_runtime_ownership(record.get("runtime"), record)
-        require(
-            binding.get("sha256") == runtime["bindingSha256"]
-            and binding_value.get("artifactSetSha256") == runtime["artifactSetSha256"],
-            "installed runtime binding differs from recorded runtime ownership",
-        )
-    artifacts = inspected.get("artifacts")
-    require(
-        isinstance(artifacts, dict) and artifacts
-        and all(value.get("status") == "exact" for value in artifacts.values()),
-        "installed runtime artifacts differ from the owned binding",
-    )
-    if inspected.get("result") == "exact_ready":
-        require(
-            record.get("schema") == RUNTIME_RECORD_SCHEMA,
-            "selected runtime route lacks exact runtime ownership",
-        )
-        inspected = recover_selected_runtime_route_for_update(
-            record_path, record, record_identity, inspected, runner
-        )
-    activation_journal = inspected.get("journals", {}).get("activation.json", {})
-    reviewed_candidate_recovery = False
-    if (inspected.get("result") in {"activation_required", "recovery_required"}
-            and activation_journal.get("status") == "present"):
-        activation_value = activation_journal.get("value", {})
-        if activation_value.get("phase") == "recovered-inhibited":
-            validate_inactive_runtime_update_state(inspected, recovered=True)
-        elif (inspected.get("result") == "recovery_required" and
-              (activation_value.get("phase") in
-               {"activation-failed", "rollback-failed"} or
-               (activation_value.get("phase") == "complete-neutral" and
-                inspected.get("reboot", {}).get("occurred") is not True))):
-            require(
-                migration_provider is not None
-                and migration_provider.is_file()
-                and not migration_provider.is_symlink(),
-                "installed runtime requires a reviewed recovery provider",
-            )
-            provider = migration_provider
-            inspected = validate_readiness(runtime_call(
-                runner, provider, "inspect", (),
-                {"recovery_required", "neutral_ready"},
-            ))
-            require(
-                inspected.get("result") in {"recovery_required", "neutral_ready"},
-                "reviewed recovery provider did not recognize the owned neutral state",
-            )
-            candidate_binding = inspected.get("identities", {}).get(
-                "installedBinding", {})
-            require(
-                candidate_binding.get("status") == "valid"
-                and candidate_binding.get("sha256") == binding.get("sha256")
-                and candidate_binding.get("value", {}).get("sourceCommit")
-                    == record.get("sourceCommit"),
-                "recovery provider interpreted a different installed runtime binding",
-            )
-            reviewed_candidate_recovery = True
-        else:
-            require(
-                activation_value.get("phase") == "complete-neutral"
-                and inspected.get("reboot", {}).get("occurred") is True,
-                "inactive runtime activation journal is neither recovered nor attributable to a prior boot",
-            )
-            if inspected.get("result") == "recovery_required":
-                require(
-                    migration_provider is not None
-                    and migration_provider.is_file()
-                    and not migration_provider.is_symlink(),
-                    "installed runtime requires a reviewed cross-boot migration provider",
-                )
-                provider = migration_provider
-                inspected = validate_readiness(runtime_call(
-                    runner, provider, "inspect", (),
-                    {"recovery_required", "activation_required"},
-                ))
-                require(inspected.get("result") in
-                        {"recovery_required", "activation_required"},
-                        "migration provider did not recognize inactive prior-boot state")
-                candidate_binding = inspected.get("identities", {}).get(
-                    "installedBinding", {})
-                require(
-                    candidate_binding.get("status") == "valid"
-                    and candidate_binding.get("sha256") == binding.get("sha256")
-                    and candidate_binding.get("value", {}).get("sourceCommit")
-                        == record.get("sourceCommit"),
-                    "migration provider interpreted a different installed runtime binding",
-                )
-            retirement = runtime_call(runner, provider, "activation-retire-plan")
-            require(
-                retirement.get("contract") == RUNTIME_READINESS_CONTRACT
-                and retirement.get("operation") == "activation-retire-plan",
-                "post-reboot activation retirement plan identity differs",
-            )
-            retirement_digest = retirement.get("planSha256")
-            retirement_plan = retirement.get("plan", {})
-            require(
-                isinstance(retirement_digest, str)
-                and SHA256.fullmatch(retirement_digest)
-                and retirement_digest == sha256_bytes(canonical(retirement_plan))
-                and retirement_plan.get("bindingSha256") == binding.get("sha256")
-                and retirement_plan.get("artifactSetSha256")
-                    == binding_value.get("artifactSetSha256"),
-                "post-reboot activation retirement plan lacks owned identities",
-            )
-            transaction_digests = retirement_plan.get("transactionJournalSha256")
-            if retirement_plan.get("version") == 2:
-                idle_digest = retirement_plan.get("applicationIdleSha256")
-                require(
-                    isinstance(transaction_digests, dict)
-                    and set(transaction_digests)
-                        == {"transaction.json", "manager.json", "application.json"}
-                    and all(value is None or
-                            (isinstance(value, str) and SHA256.fullmatch(value))
-                            for value in transaction_digests.values()),
-                    "post-reboot activation retirement plan lacks fixed transaction identities",
-                )
-                require(
-                    idle_digest is None or
-                    (isinstance(idle_digest, str) and SHA256.fullmatch(idle_digest)),
-                    "post-reboot activation retirement plan has an invalid idle-override identity",
-                )
-            preserve_owned_activation_journal(record, "before-retirement")
-            require_unchanged_ownership(
-                record_path, record, record_identity,
-                "post-reboot activation retirement",
-            )
-            retired = runtime_call(
-                runner, provider, "activation-retire",
-                ["--plan-sha256", retirement_digest],
-            )
-            require(
-                retired.get("contract") == RUNTIME_READINESS_CONTRACT
-                and retired.get("operation") == "activation-retire"
-                and retired.get("planSha256") == retirement_digest
-                and retired.get("response", {}).get("status")
-                    == "retired-post-reboot-activation"
-                and retired.get("response", {}).get("activationJournalSha256")
-                    == retirement_plan.get("activationJournalSha256"),
-                "post-reboot activation retirement response differs from the reviewed plan",
-            )
-            inspected = validate_readiness(runtime_call(
-                runner, provider, "inspect", (), {"activation_required"},
-            ), "activation_required")
-            require(
-                inspected.get("journals", {}).get("activation.json", {}).get("status")
-                    == "absent",
-                "post-reboot activation retirement left its journal present",
-            )
-    elif (inspected.get("result") == "conflict"
-          and activation_journal.get("status") == "present"
-          and activation_journal.get("value", {}).get("phase")
-              == "complete-neutral"
-          and inspected.get("conflicts")
-              == ["loaded-controller-without-completed-activation"]):
-        require(
-            migration_provider is not None
-            and migration_provider.is_file()
-            and not migration_provider.is_symlink(),
-            "installed runtime requires a reviewed route-recovery provider",
-        )
-        provider = migration_provider
-        inspected = validate_readiness(runtime_call(
-            runner, provider, "inspect", (),
-            {"recovery_required", "neutral_ready"},
-        ))
-        require(
-            inspected.get("result") in {"recovery_required", "neutral_ready"},
-            "reviewed route-recovery provider did not recognize the owned neutral state",
-        )
-        candidate_binding = inspected.get("identities", {}).get(
-            "installedBinding", {})
-        require(
-            not inspected.get("conflicts")
-            and candidate_binding.get("status") == "valid"
-            and candidate_binding.get("sha256") == binding.get("sha256")
-            and candidate_binding.get("value", {}).get("sourceCommit")
-                == record.get("sourceCommit"),
-            "route-recovery provider did not prove the owned recovery state",
-        )
-        reviewed_candidate_recovery = True
-    if (inspected.get("result") in {"recovery_required", "neutral_ready"}
-            or reviewed_candidate_recovery):
-        preserve_owned_activation_journal(record, "before-recovery")
-        recovery = runtime_call(runner, provider, "activation-recover-plan")
-        require(
-            recovery.get("contract") == RUNTIME_READINESS_CONTRACT
-            and recovery.get("operation") == "activation-recover-plan",
-            "runtime activation recovery plan identity differs",
-        )
-        recovery_digest = recovery.get("planSha256")
-        recovery_plan = recovery.get("plan", {})
-        require(
-            isinstance(recovery_digest, str) and SHA256.fullmatch(recovery_digest)
-            and recovery_digest == sha256_bytes(canonical(recovery_plan))
-            and recovery_plan.get("bindingSha256") == binding.get("sha256"),
-            "runtime activation recovery plan lacks the owned binding digest",
-        )
-        require_unchanged_ownership(
-            record_path, record, record_identity, "runtime activation recovery"
-        )
-        recovered = runtime_call(
-            runner, provider, "activation-recover",
-            ["--plan-sha256", recovery_digest],
-        )
-        require(
-            recovered.get("contract") == RUNTIME_READINESS_CONTRACT
-            and recovered.get("operation") == "activation-recover"
-            and recovered.get("planSha256") == recovery_digest
-            and recovered.get("response", {}).get("status")
-                in {"recovered-inhibited", "idempotent-no-change"},
-            "runtime activation recovery response differs from the reviewed plan",
-        )
-        preserve_owned_activation_journal(record, "after-recovery", clear=True)
-        inspected = validate_readiness(runtime_call(
-            runner, provider, "inspect", (), {"activation_required"},
-        ), "activation_required")
-    modules = inspected.get("modules")
-    endpoints = inspected.get("endpoints")
-    require(
-        inspected.get("result") == "activation_required"
-        and not inspected.get("routeSelected")
-        and isinstance(modules, dict)
-        and set(modules) == {"rp1_route_controller", "rp1_gpclk_dkms"}
-        and all(isinstance(value, dict) and value.get("status") == "absent"
-                for value in modules.values())
-        and isinstance(endpoints, dict)
-        and set(endpoints) == {"controller", "consumer"}
-        and all(isinstance(value, dict) and value.get("status") == "absent"
-                for value in endpoints.values())
-        and inspected.get("managerSocket", {}).get("status") == "absent",
-        "recovered runtime is not eligible for reviewed deployment removal",
-    )
-    planned = runtime_call(runner, provider, "remove-plan")
-    require(
-        planned.get("contract") == RUNTIME_READINESS_CONTRACT
-        and planned.get("operation") == "remove-plan",
-        "runtime deployment removal plan identity differs",
-    )
-    digest = planned.get("planSha256")
-    require(isinstance(digest, str) and SHA256.fullmatch(digest),
-            "runtime deployment removal plan lacks a reviewed digest")
-    destinations = planned.get("destinations")
-    binding_files = binding_value.get("files")
-    require(isinstance(binding_files, dict),
-            "installed runtime binding file inventory is invalid")
-    require(isinstance(destinations, list)
-            and set(destinations) == runtime_deployment_destinations(binding_files),
-            "runtime deployment removal inventory differs")
-    require_unchanged_ownership(
-        record_path, record, record_identity, "runtime deployment removal"
-    )
-    removed = runtime_call(
-        runner, provider, "remove", ["--plan-sha256", digest]
-    )
-    require(
-        removed.get("contract") == RUNTIME_READINESS_CONTRACT
-        and removed.get("operation") == "remove"
-        and removed.get("planSha256") == digest
-        and removed.get("response", {}).get("status") == "removed-exact-deployment",
-        "runtime deployment removal response differs from the reviewed plan",
-    )
-    require(not runtime_residue_inventory(pathlib.Path("/")),
-            "reviewed runtime deployment removal left residue")
+    provider = runtime_update_provider(runner, migration_provider)
+    runtime = (validate_runtime_ownership(record.get("runtime"), record)
+               if record.get("schema") == RUNTIME_RECORD_SCHEMA else {})
+    identity = {"sourceCommit": record["sourceCommit"],
+                "bindingSha256": runtime.get("bindingSha256"),
+                "artifactSetSha256": runtime.get("artifactSetSha256"),
+                "deploymentPlanSha256": runtime.get("deploymentPlanSha256")}
+    arguments = ["--source-commit", identity["sourceCommit"]]
+    for field, option in (("bindingSha256", "--binding-sha256"),
+                          ("artifactSetSha256", "--artifact-set-sha256"),
+                          ("deploymentPlanSha256", "--deployment-sha256")):
+        if identity[field] is not None:
+            arguments.extend([option, identity[field]])
+    seen = set()
+    for _ in range(8):
+        require_unchanged_ownership(record_path, record, record_identity, "runtime update planning")
+        planned = runtime_call(runner, provider, "update-plan", arguments)
+        validate_runtime_update_envelope(planned, "update-plan", identity)
+        digest = planned.get("planSha256")
+        require(isinstance(digest, str) and SHA256.fullmatch(digest)
+                and isinstance(planned.get("plan"), dict)
+                and digest == sha256_bytes(canonical(planned["plan"])),
+                "runtime update plan digest differs")
+        if planned["status"] == "prepared":
+            return
+        require(digest not in seen, "runtime update made no progress; preserve evidence and re-plan")
+        seen.add(digest)
+        require_unchanged_ownership(record_path, record, record_identity, "runtime update execution")
+        completed = runtime_call(runner, provider, "update-execute",
+                                 [*arguments, "--plan-sha256", digest])
+        validate_runtime_update_envelope(completed, "update-execute", identity)
+        require(completed.get("planSha256") == digest, "runtime update result does not match reviewed plan")
+        if completed["status"] == "prepared":
+            return
+    raise ContractError("runtime update exceeded its bounded steps; preserve evidence and re-plan")
+
+
+def validate_runtime_update_envelope(value: Mapping[str, Any], operation: str,
+                                     identity: Mapping[str, Any]) -> None:
+    require(type(value.get("schemaVersion")) is int
+            and value.get("schemaVersion") == 1
+            and value.get("contract") == RUNTIME_UPDATE_CONTRACT
+            and value.get("operation") == operation
+            and value.get("identity") == identity
+            and value.get("status") in {"planned", "prepared"}
+            and isinstance(value.get("postconditions"), dict)
+            and all(type(value["postconditions"].get(name)) is bool for name in
+                    ("runtimeAbsent", "transmissionAuthorized"))
+            and value.get("postconditions") == {
+                "runtimeAbsent": value.get("status") == "prepared",
+                "transmissionAuthorized": False},
+            "runtime update response identity or postconditions differ")
+
 
 
 def apply_development(resolved: Mapping[str, Any], record: pathlib.Path, runner: Runner) -> None:
@@ -2633,7 +2255,7 @@ def build_runtime_bundle(
     checkout = resolved.get("checkout")
     require(isinstance(checkout, dict), "resolved runtime source checkout is missing")
     source = revalidate_checkout(checkout, runner)
-    runtime_source_interface(source)
+    runtime_source_interface(source, runner)
     bundle = state_dir / "runtime-bundle"
     require(not bundle.exists() and not bundle.is_symlink(), "runtime bundle destination already exists")
     module_directory = pathlib.Path(f"/lib/modules/{platform.release()}/updates/dkms")
@@ -2719,815 +2341,47 @@ def require_unchanged_ownership(
     )
 
 
-def validate_runtime_update_identity(
-    record: Mapping[str, Any], inspected: Mapping[str, Any]
-) -> dict[str, Any]:
-    """Bind a pre-update transition to the exact owned neutral runtime."""
-    runtime = validate_runtime_ownership(record.get("runtime"), record)
-    binding = inspected.get("identities", {}).get("installedBinding", {})
-    binding_value = binding.get("value", {}) if isinstance(binding, dict) else {}
-    require(
-        binding.get("status") == "valid"
-        and binding.get("sha256") == runtime["bindingSha256"]
-        and binding_value.get("artifactSetSha256") == runtime["artifactSetSha256"]
-        and binding_value.get("sourceCommit") == record.get("sourceCommit"),
-        "installed runtime binding differs from WsprryPi ownership",
-    )
-    artifacts = inspected.get("artifacts")
-    require(
-        isinstance(artifacts, dict) and artifacts
-        and all(value.get("status") == "exact" for value in artifacts.values()),
-        "installed runtime artifacts differ from WsprryPi ownership",
-    )
-    routes = inspected.get("routes")
-    require(
-        isinstance(routes, dict)
-        and set(routes) == {"requested", "configured", "persisted", "active"}
-        and all(routes[name] is None for name in routes),
-        "runtime update preparation found a selected GPIO route",
-    )
-    consumer = inspected.get("modules", {}).get(MODULE_NAME, {})
-    consumer_endpoint = inspected.get("endpoints", {}).get("consumer", {})
-    require(
-        consumer.get("status") == "absent"
-        and consumer_endpoint.get("status") == "absent"
-        and consumer_endpoint.get("open") is False
-        and inspected.get("routeSelected") is False
-        and inspected.get("executionReady") is False,
-        "runtime update preparation found transmission-capable state",
-    )
-    return runtime
-
-
-def recover_selected_runtime_route_for_update(
-    record_path: pathlib.Path,
-    record: Mapping[str, Any],
-    record_identity: os.stat_result,
-    inspected: Mapping[str, Any],
-    runner: Runner,
-) -> dict[str, Any]:
-    """Recover one exact owned active route before neutral update recovery."""
-    runtime = validate_runtime_ownership(record.get("runtime"), record)
-    binding = inspected.get("identities", {}).get("installedBinding", {})
-    binding_value = binding.get("value", {}) if isinstance(binding, dict) else {}
-    artifacts = inspected.get("artifacts")
-    routes = inspected.get("routes")
-    modules = inspected.get("modules")
-    endpoints = inspected.get("endpoints")
-    manager = inspected.get("manager", {})
-    query = manager.get("query", {}) if isinstance(manager, dict) else {}
-    state = query.get("state", {}) if isinstance(query, dict) else {}
-    safety = inspected.get("safety", {})
-    require(
-        inspected.get("result") == "exact_ready"
-        and inspected.get("state") == "exact_ready"
-        and not inspected.get("conflicts")
-        and binding.get("status") == "valid"
-        and binding.get("sha256") == runtime["bindingSha256"]
-        and binding_value.get("artifactSetSha256") == runtime["artifactSetSha256"]
-        and binding_value.get("sourceCommit") == record.get("sourceCommit")
-        and isinstance(artifacts, dict) and artifacts
-        and all(isinstance(value, dict) and value.get("status") == "exact"
-                for value in artifacts.values()),
-        "selected runtime route differs from WsprryPi ownership",
-    )
-    require(
-        isinstance(routes, dict)
-        and set(routes) == {"requested", "configured", "persisted", "active"}
-        and routes["active"] in {"gpio4", "gpio20"}
-        and all(routes[name] in {None, routes["active"]} for name in routes)
-        and inspected.get("routeSelected") is True
-        and inspected.get("executionReady") is True,
-        "runtime update route recovery requires one exact selected route",
-    )
-    require(
-        isinstance(modules, dict)
-        and set(modules) == {MODULE_NAME, CONTROLLER_MODULE_NAME}
-        and all(value.get("status") == "loaded" for value in modules.values())
-        and isinstance(endpoints, dict)
-        and set(endpoints) == {"consumer", "controller"}
-        and all(value.get("status") == "owned" and value.get("open") is False
-                for value in endpoints.values()),
-        "runtime update selected route lacks exact closed module endpoints",
-    )
-    require(
-        manager.get("status") == "observed"
-        and query.get("operation") == "query"
-        and query.get("status") == "ok"
-        and state.get("bindingSha256") == runtime["bindingSha256"]
-        and state.get("activeRoute") == routes["active"]
-        and state.get("configuredRoute") is None
-        and state.get("qualification") is False
-        and state.get("outputEnabled") is False
-        and state.get("applicationInhibited") is False
-        and state.get("pendingTransaction") is not None
-        and state.get("applicationRestoration") is True,
-        "runtime update selected route lacks exact manager evidence",
-    )
-    require(
-        safety.get("outputInhibited") is False
-        and safety.get("operationalReady") is True
-        and safety.get("owner") is False
-        and safety.get("lease") is False
-        and safety.get("clock") == "quiescent"
-        and safety.get("gpio") == "quiescent"
-        and safety.get("dma") == "quiescent",
-        "runtime update selected route is not closed and quiescent",
-    )
-    require(
-        isinstance(binding_value.get("files"), dict)
-        and isinstance(binding_value["files"].get(str(RUNTIME_ROUTE_CLIENT)), str)
-        and SHA256.fullmatch(binding_value["files"][str(RUNTIME_ROUTE_CLIENT)])
-        and RUNTIME_ROUTE_CLIENT.is_file() and not RUNTIME_ROUTE_CLIENT.is_symlink()
-        and str(RUNTIME_ROUTE_CLIENT) in artifacts
-        and artifacts[str(RUNTIME_ROUTE_CLIENT)].get("status") == "exact"
-        and sha256_file(RUNTIME_ROUTE_CLIENT)
-            == binding_value["files"][str(RUNTIME_ROUTE_CLIENT)],
-        "installed runtime route recovery client is missing or unbound",
-    )
-    require_unchanged_ownership(
-        record_path, record, record_identity, "runtime route recovery"
-    )
-    result = runner.run(
-        ["python3", str(RUNTIME_ROUTE_CLIENT), "recover", "--execute"],
-        check=False,
-    )
-    response = json_result(result, "runtime route recovery")
-    recovered_state = response.get("state", {})
-    require(
-        result.returncode == 0
-        and response.get("schemaVersion") == 3
-        and response.get("contract") == RUNTIME_ROUTE_CONTRACT
-        and response.get("operation") == "recover"
-        and response.get("status") == "recovered-inhibited"
-        and recovered_state.get("bindingSha256") == runtime["bindingSha256"]
-        and recovered_state.get("activeRoute") is None
-        and recovered_state.get("configuredRoute") is None
-        and recovered_state.get("qualification") is False
-        and recovered_state.get("outputEnabled") is False
-        and recovered_state.get("applicationInhibited") is True,
-        "runtime route recovery did not reach exact inhibited state",
-    )
-    require_unchanged_ownership(
-        record_path, record, record_identity, "post-route runtime inspection"
-    )
-    return validate_readiness(runtime_call(
-        runner, RUNTIME_PROVIDER, "inspect", (), {"recovery_required"}
-    ), "recovery_required")
-
-
-def retire_prior_boot_activation_for_update(
-    record_path: pathlib.Path,
-    record: Mapping[str, Any],
-    record_identity: os.stat_result,
-    inspected: Mapping[str, Any],
-    runner: Runner,
-) -> dict[str, Any]:
-    """Retire exact prior-boot activation and route journals after recovery."""
-    runtime = validate_runtime_update_identity(record, inspected)
-    journal = inspected.get("journals", {}).get("activation.json", {})
-    journal_value = journal.get("value", {}) if isinstance(journal, dict) else {}
-    activation = inspected.get("activation", {}).get("value", {})
-    require(
-        inspected.get("result") == "recovery_required"
-        and inspected.get("reboot", {}).get("occurred") is True
-        and journal.get("status") == "present"
-        and journal_value.get("phase") == "complete-neutral"
-        and journal_value.get("plan", {}).get("bootId") != activation.get("bootId")
-        and all(value.get("status") == "absent"
-                for value in inspected.get("modules", {}).values())
-        and all(value.get("status") == "absent"
-                and value.get("open") is False
-                for value in inspected.get("endpoints", {}).values())
-        and inspected.get("managerSocket", {}).get("status") == "absent",
-        "runtime update prior-boot recovery is not safely retirement-eligible",
-    )
-    retirement = runtime_call(runner, RUNTIME_PROVIDER, "activation-retire-plan")
-    require(
-        retirement.get("contract") == RUNTIME_READINESS_CONTRACT
-        and retirement.get("operation") == "activation-retire-plan",
-        "runtime update activation retirement plan identity differs",
-    )
-    retirement_digest = retirement.get("planSha256")
-    plan = retirement.get("plan", {})
-    required = {
-        "version", "operation", "bindingSha256", "artifactSetSha256",
-        "bootId", "lastDeploymentSha256", "activationJournalSha256",
-        "applicationIdleSha256", "transactionJournalSha256",
-    }
-    transaction_digests = plan.get("transactionJournalSha256")
-    require(
-        isinstance(retirement_digest, str) and SHA256.fullmatch(retirement_digest)
-        and isinstance(plan, dict) and set(plan) == required
-        and retirement_digest == sha256_bytes(canonical(plan))
-        and plan.get("version") == 2
-        and plan.get("operation") == "retire-post-reboot-activation"
-        and plan.get("bindingSha256") == runtime["bindingSha256"]
-        and plan.get("artifactSetSha256") == runtime["artifactSetSha256"]
-        and plan.get("bootId") == activation.get("bootId")
-        and isinstance(plan.get("lastDeploymentSha256"), str)
-        and SHA256.fullmatch(plan["lastDeploymentSha256"])
-        and plan.get("activationJournalSha256")
-            == sha256_bytes(canonical(journal_value))
-        and (plan.get("applicationIdleSha256") is None
-             or (isinstance(plan["applicationIdleSha256"], str)
-                 and SHA256.fullmatch(plan["applicationIdleSha256"])))
-        and isinstance(transaction_digests, dict)
-        and set(transaction_digests)
-            == {"transaction.json", "manager.json", "application.json"}
-        and all(value is None or
-                (isinstance(value, str) and SHA256.fullmatch(value))
-                for value in transaction_digests.values()),
-        "runtime update activation retirement plan lacks exact owned identities",
-    )
-    preserve_owned_activation_journal(record, "before-retirement")
-    require_unchanged_ownership(
-        record_path, record, record_identity,
-        "runtime update activation retirement",
-    )
-    retired = runtime_call(
-        runner, RUNTIME_PROVIDER, "activation-retire",
-        ["--plan-sha256", retirement_digest],
-    )
-    require(
-        retired.get("contract") == RUNTIME_READINESS_CONTRACT
-        and retired.get("operation") == "activation-retire"
-        and retired.get("planSha256") == retirement_digest
-        and retired.get("response", {}).get("status")
-            == "retired-post-reboot-activation"
-        and retired.get("response", {}).get("activationJournalSha256")
-            == plan.get("activationJournalSha256"),
-        "runtime update activation retirement response differs from its plan",
-    )
-    require_unchanged_ownership(
-        record_path, record, record_identity,
-        "post-retirement runtime inspection",
-    )
-    final = validate_readiness(runtime_call(
-        runner, RUNTIME_PROVIDER, "inspect", (), {"activation_required"}
-    ), "activation_required")
-    validate_runtime_update_identity(record, final)
-    validate_inactive_runtime_update_state(final, recovered=False)
-    return final
-
-
 def remove_owned_runtime_for_fresh_activation(
-    record_path: pathlib.Path,
-    record: Mapping[str, Any],
-    record_identity: os.stat_result,
-    runner: Runner,
+    record_path: pathlib.Path, record: Mapping[str, Any],
+    record_identity: os.stat_result, runner: Runner,
     resolved: Mapping[str, Any] | None = None,
 ) -> None:
-    """Remove exact inactive runtime files and retain provider-only ownership."""
-    try:
-        recover_and_remove_owned_runtime(
-            record_path, record, record_identity, runner
-        )
-    except RuntimeOperationError as error:
-        # Removal restores the predeployment files before the provider can
-        # publish its response. If a later cleanup or response step fails, the
-        # provider may already be absent. Resume the existing digest-bound
-        # interrupted-removal workflow immediately instead of requiring a
-        # second installer invocation.
-        checkout = resolved.get("checkout") if isinstance(resolved, Mapping) else None
-        if (error.operation != "remove"
-                or RUNTIME_PROVIDER.exists() or RUNTIME_PROVIDER.is_symlink()
-                or not isinstance(checkout, dict)):
-            raise
-        resume_interrupted_runtime_removal(
-            record_path, record, record_identity, resolved, runner
-        )
-        return
+    if record.get("channel") == "development":
+        validate_development_rollback_authority(record, pathlib.Path("/"))
+    candidate = None
+    if isinstance(resolved, Mapping) and isinstance(resolved.get("checkout"), dict):
+        source = revalidate_checkout(resolved["checkout"], runner)
+        candidate = source / "scripts/runtime_provider.py"
+    recover_and_remove_owned_runtime(record_path, record, record_identity, runner, candidate)
     replacement = copy.deepcopy(record)
     replacement["schema"] = RECORD_SCHEMA
     replacement.pop("runtime", None)
-    replace_owned_record(
-        record_path, record, record_identity, replacement
-    )
-
-
-def resume_interrupted_runtime_removal(
-    record_path: pathlib.Path,
-    record: Mapping[str, Any],
-    record_identity: os.stat_result,
-    resolved: Mapping[str, Any],
-    runner: Runner,
-) -> None:
-    """Recover a digest-bound removal barrier after its provider was removed."""
-    runtime = validate_runtime_ownership(record.get("runtime"), record)
-    checkout = resolved.get("checkout")
-    require(isinstance(checkout, dict),
-            "interrupted runtime removal lacks pinned source identity")
-    source = revalidate_checkout(checkout, runner)
-    deployment = source / "scripts/runtime_deployment.py"
-    require(
-        not RUNTIME_PROVIDER.exists() and not RUNTIME_PROVIDER.is_symlink()
-        and deployment.is_file() and not deployment.is_symlink(),
-        "interrupted runtime removal lacks exact source recovery tools",
-    )
-    inventory = existing_inventory(pathlib.Path("/"), runner)
-    require(
-        inventory.get("activeModule") is False
-        and inventory.get("activeController") is False
-        and inventory.get("configuredRoute") is False
-        and not pathlib.Path("/dev/rp1-route-admin").exists()
-        and not pathlib.Path("/dev/rp1-gpclk").exists()
-        and not pathlib.Path("/run/rp1-gpclk-dkms/route-manager.sock").exists(),
-        "interrupted runtime removal is not inactive and attributable",
-    )
-    pending = pathlib.Path(
-        "/var/lib/rp1-gpclk-dkms/runtime-admin/deployment-pending.json"
-    )
-    if pending.exists() or pending.is_symlink():
-        planned_result = runner.run(
-            ["python3", str(deployment), "recover"], check=False
-        )
-        planned = json_result(planned_result, "runtime deployment recovery plan")
-        destinations = planned.get("destinations")
-        require(
-            planned_result.returncode == 0
-            and set(planned) == {
-                "planSha256", "destinations", "applicationRemainsInhibited"
-            }
-            and planned.get("planSha256") == runtime["deploymentPlanSha256"]
-            and planned.get("applicationRemainsInhibited") is True
-            and isinstance(destinations, dict)
-            and set(destinations) == runtime_deployment_destinations()
-            and all(isinstance(value, dict)
-                    and set(value) == {"before", "after"}
-                    and all(item is None or
-                            (isinstance(item, str) and SHA256.fullmatch(item))
-                            for item in value.values())
-                    for value in destinations.values()),
-            "runtime deployment recovery plan differs from recorded ownership",
-        )
-        require_unchanged_ownership(
-            record_path, record, record_identity,
-            "interrupted runtime deployment recovery",
-        )
-        recovered = runner.run(
-            ["python3", str(deployment), "recover", "--plan-sha256",
-             runtime["deploymentPlanSha256"]],
-            check=False,
-        )
-        require(
-            recovered.returncode == 0,
-            "runtime deployment recovery execution failed",
-        )
-        require_unchanged_ownership(
-            record_path, record, record_identity,
-            "post-recovery runtime verification",
-        )
-    require(
-        not pending.exists() and not pending.is_symlink()
-        and all(not pathlib.Path(path).exists()
-                and not pathlib.Path(path).is_symlink()
-                for path in runtime_deployment_destinations()),
-        "recovered runtime removal did not reach exact absence",
-    )
-    replacement = copy.deepcopy(record)
-    replacement["schema"] = RECORD_SCHEMA
-    replacement.pop("runtime", None)
-    replace_owned_record(
-        record_path, record, record_identity, replacement
-    )
-
-
-def finalize_completed_runtime_removal(
-    record_path: pathlib.Path,
-    record: Mapping[str, Any],
-    record_identity: os.stat_result,
-    runner: Runner,
-) -> None:
-    """Retire runtime ownership after a provider-removal checkpoint."""
-    validate_runtime_ownership(record.get("runtime"), record)
-    inventory = existing_inventory(pathlib.Path("/"), runner)
-    pending = pathlib.Path(
-        "/var/lib/rp1-gpclk-dkms/runtime-admin/deployment-pending.json"
-    )
-    require(
-        inventory.get("activeModule") is False
-        and inventory.get("activeController") is False
-        and inventory.get("configuredRoute") is False
-        and not pathlib.Path("/dev/rp1-route-admin").exists()
-        and not pathlib.Path("/dev/rp1-gpclk").exists()
-        and not pathlib.Path("/run/rp1-gpclk-dkms/route-manager.sock").exists()
-        and not pending.exists() and not pending.is_symlink()
-        and all(not pathlib.Path(path).exists()
-                and not pathlib.Path(path).is_symlink()
-                for path in runtime_deployment_destinations()),
-        "interrupted runtime removal is not complete and attributable",
-    )
-    require_unchanged_ownership(
-        record_path, record, record_identity,
-        "completed runtime removal verification",
-    )
-    replacement = copy.deepcopy(record)
-    replacement["schema"] = RECORD_SCHEMA
-    replacement.pop("runtime", None)
-    replace_owned_record(
-        record_path, record, record_identity, replacement
-    )
-
-
-def validate_inactive_runtime_update_state(
-    inspected: Mapping[str, Any], *, recovered: bool
-) -> None:
-    require(
-        inspected.get("result") == "activation_required"
-        and inspected.get("state") == "activation_required"
-        and not inspected.get("conflicts"),
-        "runtime update preparation did not reach inactive activation-required state",
-    )
-    modules = inspected.get("modules")
-    endpoints = inspected.get("endpoints")
-    routes = inspected.get("routes")
-    require(
-        isinstance(modules, dict)
-        and set(modules) == {MODULE_NAME, CONTROLLER_MODULE_NAME}
-        and all(value.get("status") == "absent" for value in modules.values())
-        and isinstance(endpoints, dict)
-        and set(endpoints) == {"consumer", "controller"}
-        and all(value.get("status") == "absent" for value in endpoints.values())
-        and all(value.get("open") is False for value in endpoints.values()),
-        "runtime update preparation left a module or endpoint active",
-    )
-    require(
-        isinstance(routes, dict)
-        and set(routes) == {"requested", "configured", "persisted", "active"}
-        and all(routes[name] is None for name in routes)
-        and inspected.get("routeSelected") is False
-        and inspected.get("executionReady") is False,
-        "runtime update preparation left a route or transmission eligibility",
-    )
-    if recovered:
-        activation_observation = inspected.get("activation", {})
-        activation = activation_observation.get("value", {})
-        journal = inspected.get("journals", {}).get("activation.json", {})
-        service = activation.get("applicationService", {})
-        require(
-            activation_observation.get("status") == "observed"
-            and activation.get("inhibited") is True
-            and journal.get("status") == "present"
-            and journal.get("value", {}).get("phase") == "recovered-inhibited"
-            and service.get("active") in {"inactive", "failed"}
-            and service.get("MainPID") == "0",
-            "runtime update recovery did not retain application inhibition",
-        )
-
-
-def validate_runtime_update_retry_conflict(
-    inspected: Mapping[str, Any], journal_value: Mapping[str, Any]
-) -> None:
-    """Admit only exact safe service drift after neutral activation."""
-    activation_observation = inspected.get("activation", {})
-    activation = activation_observation.get("value", {})
-    controller_state = activation.get("controllerState")
-    plan = journal_value.get("plan", {})
-    outcome = journal_value.get("application", {})
-    prior_service = outcome.get("service", {}) if isinstance(outcome, dict) else {}
-    current_service = activation.get("applicationService", {})
-    socket = activation.get("socket", {})
-    manager_socket = activation.get("managerSocket", {})
-    manager_service = activation.get("managerService", {})
-    manager = inspected.get("manager", {})
-    query = manager.get("query", {}) if isinstance(manager, dict) else {}
-    manager_state = query.get("state", {}) if isinstance(query, dict) else {}
-    planned_application = plan.get("application", {})
-    require(
-        activation_observation.get("status") == "observed"
-        and journal_value.get("controller") == controller_state
-        and plan.get("bootId") == activation.get("bootId")
-        and plan.get("bindingSha256") == activation.get("bindingSha256")
-        and plan.get("artifactSetSha256") == activation.get("artifactSetSha256"),
-        "runtime update retry conflict lacks matching activation provenance",
-    )
-    exact_service_shape = (
-        isinstance(outcome, dict)
-        and isinstance(planned_application, dict)
-        and set(prior_service) == {"LoadState", "ActiveState", "UnitFileState", "MainPID"}
-        and set(current_service) == {"load", "active", "enabled", "fragment", "MainPID"}
-        and prior_service.get("LoadState") == "loaded"
-        and current_service.get("load") == prior_service.get("LoadState")
-        and current_service.get("enabled") == prior_service.get("UnitFileState")
-        and current_service.get("fragment") == "/etc/systemd/system/wsprrypi.service"
-        and current_service.get("MainPID", "0") != "0"
-    )
-    restored_pid_drift = (
-        exact_service_shape
-        and outcome.get("phase") == "restored"
-        and planned_application.get("wasActive") is True
-        and prior_service.get("ActiveState") == "active"
-        and prior_service.get("MainPID", "0") != "0"
-        and current_service.get("active") == "active"
-        and current_service.get("MainPID") != prior_service.get("MainPID")
-    )
-    installer_started_service = (
-        exact_service_shape
-        and outcome.get("phase") == "stopped"
-        and planned_application.get("wasActive") is False
-        and prior_service.get("ActiveState") == "inactive"
-        and prior_service.get("MainPID") == "0"
-        and current_service.get("active") == "active"
-    )
-    masked_service_drift = (
-        isinstance(outcome, dict)
-        and isinstance(planned_application, dict)
-        and set(prior_service) == {"LoadState", "ActiveState", "UnitFileState", "MainPID"}
-        and set(current_service) == {"load", "active", "enabled", "fragment", "MainPID"}
-        and outcome.get("phase") == "restored"
-        and planned_application.get("wasActive") is True
-        and prior_service.get("LoadState") == "loaded"
-        and prior_service.get("ActiveState") == "active"
-        and prior_service.get("UnitFileState") == "enabled"
-        and prior_service.get("MainPID", "0") != "0"
-        and current_service.get("load") == "masked"
-        and current_service.get("active") in {"inactive", "failed"}
-        and current_service.get("enabled") == "masked"
-        and current_service.get("fragment") ==
-            "/etc/systemd/system/wsprrypi.service"
-        and current_service.get("MainPID") == "0"
-    )
-    externally_stopped_service = (
-        isinstance(outcome, dict)
-        and isinstance(planned_application, dict)
-        and set(prior_service) == {"LoadState", "ActiveState", "UnitFileState", "MainPID"}
-        and set(current_service) == {"load", "active", "enabled", "fragment", "MainPID"}
-        and outcome.get("phase") == "restored"
-        and planned_application.get("wasActive") is True
-        and prior_service.get("LoadState") == "loaded"
-        and prior_service.get("ActiveState") == "active"
-        and prior_service.get("UnitFileState") == "enabled"
-        and prior_service.get("MainPID", "0") != "0"
-        and current_service.get("load") == "loaded"
-        and current_service.get("active") in {"inactive", "failed"}
-        and current_service.get("enabled") == "enabled"
-        and current_service.get("fragment") ==
-            "/etc/systemd/system/wsprrypi.service"
-        and current_service.get("MainPID") == "0"
-    )
-    require(
-        restored_pid_drift or installer_started_service or
-        masked_service_drift or externally_stopped_service,
-        "runtime update preparation permits only exact service drift",
-    )
-    require(
-        socket.get("active") == "active"
-        and socket.get("fragment") ==
-            "/usr/lib/systemd/system/rp1-gpclk-route-manager.socket"
-        and manager_socket.get("status") == "owned"
-        and manager_service.get("load") == "loaded"
-        and manager_service.get("fragment") ==
-            "/usr/lib/systemd/system/rp1-gpclk-route-manager@.service"
-        and activation.get("inhibited") is False
-        and manager.get("status") == "observed"
-        and query.get("operation") == "query"
-        and query.get("status") == "ok"
-        and manager_state.get("bindingSha256") == activation.get("bindingSha256")
-        and manager_state.get("bootId") == activation.get("bootId")
-        and manager_state.get("controller") == controller_state
-        and manager_state.get("activeRoute") is None
-        and manager_state.get("configuredRoute") is None
-        and manager_state.get("qualification") is False
-        and manager_state.get("outputEnabled") is False
-        and manager_state.get("applicationInhibited") is False
-        and manager_state.get("pendingTransaction") is None
-        and manager_state.get("application") is None
-        and manager_state.get("applicationRestoration") is True,
-        "runtime update retry conflict differs beyond application PID drift",
-    )
+    replace_owned_record(record_path, record, record_identity, replacement)
 
 
 def prepare_runtime_update(args: argparse.Namespace, runner: Runner) -> None:
-    """Recover exact neutral administration before application replacement."""
-    resolved: Mapping[str, Any] | None = None
+    """Delegate runtime preparation; retain only application-owned provenance."""
+    resolved = None
     if args.command == "prepare-runtime-update":
-        state_dir = secure_state_dir(args.state_dir)
-        plan = load_plan(state_dir)
+        plan = load_plan(secure_state_dir(args.state_dir))
         require(not plan.get("dryRun"), "dry-run plan cannot prepare a runtime update")
         if not plan["decision"]["install"]:
             print("RP1-GPCLK-DKMS runtime update preparation skipped by resolved plan.")
             return
         resolved = plan.get("resolved")
         require(isinstance(resolved, dict), "prepared runtime source identity is missing")
-    record, record_identity, reason = load_ownership_record(args.record)
-    if record is None or record_identity is None:
-        if args.command == "prepare-runtime-removal":
-            print(f"No owned RP1 runtime requires pre-uninstall recovery: {reason or 'ownership is unproven'}.")
-        else:
-            print(f"No existing owned RP1 runtime requires update preparation: {reason or 'ownership is unproven'}.")
+    record, identity, reason = load_ownership_record(args.record)
+    if record is None or identity is None:
+        print(f"No owned RP1 runtime requires preparation: {reason or 'ownership is unproven'}.")
         return
-    require(
-        record is not None and record_identity is not None,
-        f"WsprryPi provider ownership is required before runtime update preparation: {reason or 'unknown record'}",
-    )
-    if args.command == "prepare-runtime-update":
-        if record.get("sourceCommit") != resolved.get("commit"):
-            print("Owned RP1 provider source differs from the selected source; deferring exact predecessor recovery to provider migration.")
-            return
-    if record.get("schema") != RUNTIME_RECORD_SCHEMA:
-        print("No existing neutral runtime administration requires update preparation.")
+    if record.get("schema") not in {RECORD_SCHEMA, RUNTIME_RECORD_SCHEMA}:
+        print("No owned runtime administration requires preparation.")
         return
-    if not RUNTIME_PROVIDER.exists() and not RUNTIME_PROVIDER.is_symlink():
-        if (args.command == "prepare-runtime-update"
-                and isinstance(resolved, Mapping)
-                and isinstance(resolved.get("checkout"), dict)):
-            resume_interrupted_runtime_removal(
-                args.record, record, record_identity, resolved, runner
-            )
-            print("RP1-GPCLK-DKMS interrupted runtime removal recovered for fresh application activation.")
-            return
-        if args.command == "prepare-runtime-removal":
-            finalize_completed_runtime_removal(
-                args.record, record, record_identity, runner
-            )
-            print("RP1-GPCLK-DKMS completed runtime removal checkpoint verified for uninstall.")
-            return
+    # v2 includes the interrupted window before the application recorded a
+    # neutral-activation receipt. The provider decides whether residue exists.
+    remove_owned_runtime_for_fresh_activation(args.record, record, identity, runner, resolved)
+    print("RP1-GPCLK-DKMS runtime preparation verified through the provider update contract.")
 
-    inspected = validate_readiness(runtime_call(
-        runner, RUNTIME_PROVIDER, "inspect", (),
-        {"exact_ready", "neutral_ready", "activation_required", "conflict", "recovery_required"},
-    ))
-    if inspected.get("result") == "exact_ready":
-        inspected = recover_selected_runtime_route_for_update(
-            args.record, record, record_identity, inspected, runner
-        )
-    runtime = validate_runtime_update_identity(record, inspected)
-    result = inspected.get("result")
-    journal = inspected.get("journals", {}).get("activation.json", {})
-    journal_value = journal.get("value", {}) if isinstance(journal, dict) else {}
-
-    if (result == "recovery_required"
-            and inspected.get("reboot", {}).get("occurred") is True
-            and journal.get("status") == "present"
-            and journal_value.get("phase") == "complete-neutral"
-            and all(value.get("status") == "absent"
-                    for value in inspected.get("modules", {}).values())):
-        retire_prior_boot_activation_for_update(
-            args.record, record, record_identity, inspected, runner
-        )
-        remove_owned_runtime_for_fresh_activation(
-            args.record, record, record_identity, runner, resolved
-        )
-        print("RP1-GPCLK-DKMS prior-boot runtime retired and removed for fresh application activation.")
-        return
-
-    if (result == "activation_required"
-            and journal.get("status") == "absent"
-            and all(value.get("status") == "absent"
-                    for value in inspected.get("modules", {}).values())):
-        validate_inactive_runtime_update_state(inspected, recovered=False)
-        remove_owned_runtime_for_fresh_activation(
-            args.record, record, record_identity, runner, resolved
-        )
-        print("RP1-GPCLK-DKMS retired runtime removal resumed for fresh application activation.")
-        return
-
-    if result == "activation_required":
-        recovered = journal.get("status") == "present" and journal_value.get("phase") == "recovered-inhibited"
-        post_reboot = (
-            journal.get("status") == "present"
-            and journal_value.get("phase") == "complete-neutral"
-            and inspected.get("reboot", {}).get("occurred") is True
-        )
-        require(recovered or post_reboot,
-                "owned runtime is inactive without recoverable update or post-reboot evidence")
-        validate_inactive_runtime_update_state(inspected, recovered=recovered)
-        remove_owned_runtime_for_fresh_activation(
-            args.record, record, record_identity, runner, resolved
-        )
-        print("RP1-GPCLK-DKMS inactive runtime removed for fresh application activation.")
-        return
-
-    if result == "conflict":
-        require(
-            inspected.get("conflicts") == ["loaded-controller-without-completed-activation"],
-            "runtime update preparation refuses non-retry conflicts",
-        )
-        validate_runtime_update_retry_conflict(inspected, journal_value)
-    elif result != "recovery_required":
-        require(result == "neutral_ready", "runtime update preparation requires neutral readiness")
-
-    activation_observation = inspected.get("activation", {})
-    activation = activation_observation.get("value", {})
-    controller = inspected.get("modules", {}).get(CONTROLLER_MODULE_NAME, {})
-    activation_controller = activation.get("controller", {})
-    controller_endpoint = inspected.get("endpoints", {}).get("controller", {})
-    controller_state = activation.get("controllerState")
-    # A completed removal is neutral_ready at a later generation in the same
-    # session. Attribute it to the retained route journals and the provider's
-    # digest-bound recovery plan, not to the original generation-zero snapshot.
-    application = inspected.get("journals", {}).get("application.json", {}).get("value", {})
-    completed_route_removal = (
-        result == "neutral_ready"
-        and isinstance(application, dict)
-        and application.get("operation") == "remove"
-        and application.get("phase") in {
-            "neutral-restored", "neutral-stopped", "neutral-administrator-masked"
-        }
-        and journal_value.get("phase") == "complete-neutral"
-    )
-    recovered_route_state = result == "recovery_required" or completed_route_removal
-    require(
-        activation_observation.get("status") == "observed"
-        and controller.get("status") == "loaded"
-        and activation_controller.get("status") == "loaded"
-        and activation_controller.get("exact") is True
-        and controller_endpoint.get("status") == "owned"
-        and controller_endpoint.get("open") is False
-        and isinstance(controller_state, dict)
-        and controller_state.get("session") == runtime["controllerSession"]
-        and not any(controller_state.get(name) for name in
-                    ("id", "error", "route", "flags"))
-        and journal.get("status") == "present"
-        and journal_value.get("requestId") == runtime["activationRequestId"]
-        and journal_value.get("planSha256") == runtime["activationPlanSha256"]
-        and ((recovered_route_state
-              and controller_state.get("generation", 0) > 0
-              and journal_value.get("phase") in {
-                  "activation-failed", "rollback-failed", "complete-neutral"
-              })
-             or (not recovered_route_state
-                 and controller_state.get("generation") == runtime["controllerGeneration"]
-                 and journal_value.get("phase") == "complete-neutral")),
-        "runtime update preparation lacks exact neutral controller evidence",
-    )
-
-    expected_route_recovery = None
-    if recovered_route_state:
-        journals = inspected.get("journals", {})
-        expected_route_recovery = {}
-        for name in ("transaction.json", "manager.json", "application.json"):
-            item = journals.get(name, {}) if isinstance(journals, dict) else {}
-            if item.get("status") == "absent" and not completed_route_removal:
-                expected_route_recovery[name] = None
-            else:
-                require(item.get("status") == "present" and
-                        isinstance(item.get("value"), dict),
-                        "runtime update route recovery journal is unavailable")
-                expected_route_recovery[name] = sha256_bytes(
-                    canonical(item["value"]))
-
-    recovery = runtime_call(runner, RUNTIME_PROVIDER, "activation-recover-plan")
-    require(
-        recovery.get("contract") == RUNTIME_READINESS_CONTRACT
-        and recovery.get("operation") == "activation-recover-plan",
-        "runtime update recovery plan identity differs",
-    )
-    recovery_digest = recovery.get("planSha256")
-    recovery_plan = recovery.get("plan", {})
-    recovery_plan_fields = {
-        "version", "operation", "activationJournalSha256", "bindingSha256",
-        "bootId", "controllerLoaded", "controllerState",
-        "routeRecoverySha256", "socketWasActive", "alreadyRecovered",
-    }
-    require(
-        isinstance(recovery_digest, str) and SHA256.fullmatch(recovery_digest)
-        and isinstance(recovery_plan, dict)
-        and set(recovery_plan) == recovery_plan_fields
-        and recovery_digest == sha256_bytes(canonical(recovery_plan))
-        and recovery_plan.get("version") == 2
-        and recovery_plan.get("operation") == "neutral-activation-recovery"
-        and recovery_plan.get("bindingSha256") == runtime["bindingSha256"]
-        and recovery_plan.get("bootId") == activation.get("bootId")
-        and recovery_plan.get("activationJournalSha256")
-            == sha256_bytes(canonical(journal_value))
-        and recovery_plan.get("controllerLoaded") is True
-        and recovery_plan.get("controllerState") == controller_state
-        and recovery_plan.get("routeRecoverySha256") == expected_route_recovery
-        and recovery_plan.get("socketWasActive")
-            is journal_value.get("plan", {}).get("socketWasActive")
-        and recovery_plan.get("alreadyRecovered") is False,
-        "runtime update recovery plan lacks exact owned activation identities",
-    )
-    require_unchanged_ownership(
-        args.record, record, record_identity, "runtime update evidence preservation"
-    )
-    preserve_owned_activation_journal(record, "before-application-update")
-    require_unchanged_ownership(
-        args.record, record, record_identity, "runtime update recovery"
-    )
-    recovered = runtime_call(
-        runner, RUNTIME_PROVIDER, "activation-recover",
-        ["--plan-sha256", recovery_digest],
-    )
-    require(
-        recovered.get("contract") == RUNTIME_READINESS_CONTRACT
-        and recovered.get("operation") == "activation-recover"
-        and recovered.get("planSha256") == recovery_digest
-        and recovered.get("response", {}).get("status")
-            in {"recovered-inhibited", "idempotent-no-change"},
-        "runtime update recovery response differs from the reviewed plan",
-    )
-    final = validate_readiness(runtime_call(
-        runner, RUNTIME_PROVIDER, "inspect", (), {"activation_required"}
-    ))
-    validate_runtime_update_identity(record, final)
-    validate_inactive_runtime_update_state(final, recovered=True)
-    remove_owned_runtime_for_fresh_activation(
-        args.record, record, record_identity, runner, resolved
-    )
-    print("RP1-GPCLK-DKMS neutral runtime recovered and removed for fresh application activation.")
 
 
 def activate_runtime(args: argparse.Namespace, runner: Runner) -> None:
@@ -3586,46 +2440,12 @@ def activate_runtime(args: argparse.Namespace, runner: Runner) -> None:
         and activation_result.get("planSha256") == activation_digest,
         "neutral activation response identity differs from the reviewed plan",
     )
-    response = activation_result.get("response", {})
-    journal = response.get("journal", {}) if isinstance(response, dict) else {}
-    request_id = journal.get("requestId")
-    require(isinstance(request_id, str) and len(request_id) >= 8, "neutral activation response lacks an attributable request ID")
-    final = validate_readiness(runtime_call(runner, RUNTIME_PROVIDER, "inspect"), "neutral_ready")
-    require(final.get("administrationEligible") is True, "neutral runtime administration is not eligible")
-    require(final.get("executionReady") is False and final.get("routeSelected") is False, "neutral runtime unexpectedly selected or enabled transmission")
-    routes = final.get("routes")
-    require(
-        isinstance(routes, dict)
-        and set(routes) == {"requested", "configured", "persisted", "active"}
-        and all(routes[name] is None for name in routes),
-        "neutral runtime route evidence is missing or selected",
-    )
-    safety = final.get("safety", {})
-    require(safety.get("outputInhibited") is False and
-            safety.get("operationalReady") is False and
-            safety.get("owner") is False and safety.get("lease") is False,
-            "neutral runtime output state is not unowned and administratively quiescent")
-    installed_binding = final.get("identities", {}).get("installedBinding", {})
-    require(installed_binding.get("sha256") == reviewed["bindingSha256"], "installed runtime binding differs from reviewed bundle")
-    require(installed_binding.get("value", {}).get("artifactSetSha256") == reviewed["artifactSetSha256"], "installed runtime artifact set differs from reviewed bundle")
-    activation_observation = final.get("activation", {}).get("value", {})
-    controller = activation_observation.get("controllerState", {})
-    require(isinstance(controller, dict), "neutral readiness lacks controller identity")
-    runtime = {
-        "readinessContract": RUNTIME_READINESS_CONTRACT,
-        "bindingSha256": reviewed["bindingSha256"],
-        "artifactSetSha256": reviewed["artifactSetSha256"],
-        "sourceCommit": resolved["commit"],
-        "productVersion": runtime_product_version(resolved),
-        "targetKernel": platform.release(),
-        "compatibilityIdentities": reviewed["binding"]["compatibilityIdentities"],
-        "deploymentPlanSha256": deployment_digest,
-        "activationPlanSha256": activation_digest,
-        "activationRequestId": request_id,
-        "controllerSession": controller.get("session"),
-        "controllerGeneration": controller.get("generation"),
-        "state": "neutral_ready", "route": None, "output": "disabled",
-    }
+    runtime = validate_resumable_neutral_activation(record, {}, runner)
+    require(runtime["bindingSha256"] == reviewed["bindingSha256"]
+            and runtime["artifactSetSha256"] == reviewed["artifactSetSha256"]
+            and runtime["deploymentPlanSha256"] == deployment_digest
+            and runtime["activationPlanSha256"] == activation_digest,
+            "runtime installation receipt differs from the reviewed plans")
     replacement = copy.deepcopy(record)
     replacement["schema"] = RUNTIME_RECORD_SCHEMA
     replacement["runtime"] = runtime

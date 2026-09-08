@@ -1434,6 +1434,11 @@ installer-dependency-test:
 rp1-gpclk-dkms-installer-test:
 	$(Q)python3 ../scripts/tests/rp1_gpclk_dkms_install_test.py
 
+.PHONY: rp1-gpclk-update-contract-test
+rp1-gpclk-update-contract-test:
+	@test -n "$(RP1_PROVIDER_SOURCE)" || { echo "RP1_PROVIDER_SOURCE=/path/to/RP1-GPCLK-DKMS is required"; exit 2; }
+	$(Q)python3 ../scripts/tests/rp1_gpclk_update_contract_test.py "$(RP1_PROVIDER_SOURCE)"
+
 ui-publication-test:
 	$(Q)python3 ../scripts/tests/ui_publication_test.py
 
