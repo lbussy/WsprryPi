@@ -178,3 +178,12 @@ the distro-installed `ws` module. The job now uses the UI component's existing
 lockfile through `npm ci --ignore-scripts`, matching the established UI CI job.
 This dependency repair requires a fresh browser CI pass; the earlier failed
 step is retained as a failure, not visual acceptance.
+
+The follow-up is closed by [run 34268677261](https://github.com/WsprryPi/WsprryPi/actions/runs/34268677261)
+at `d333c69edc8a65bf59ae52603110996921f82ce1`: all five jobs passed, including
+`wtp-network-loopback`, `macos-simulated-profile`, `strict-i2c-profile`,
+`non-hardware-validation` and `ubuntu-gcc13-release`. The network job passed its
+29 TLS cases, 2012 production/runtime checks, actual Pico interoperability and
+rendered desktop/mobile browser workflow. The complete Linux semantics and
+GCC 13 warnings-as-errors release build also passed. No physical acceptance is
+implied. The custom access-token secret is no longer referenced by this workflow.
