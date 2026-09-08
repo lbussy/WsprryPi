@@ -103,3 +103,24 @@ re-enable. Review also repaired readiness selection for an RF-off compatible PLL
 retune: it may wait while inhibited, whereas active RF still fails immediately.
 The initial off-retune fixture had only two unique WSPR tones and correctly failed
 configuration; corrected it to the required complete four-tone set.
+
+## Step 5: complete realized frequency chain
+
+Ordinary frequency reporting now uses the programmed PLL ratio as well as the
+MultiSynth/R-divider, including calibration of the reference. Tests independently
+decode the packed bytes over both calibration signs, low-frequency R-divider
+cases, HF and 2 m. Reviewed 40 m/2 m spacing remains checked separately. A fixture
+asserts that it actually exposes a nonzero omitted PLL residual. This corrects
+reporting, not the transmitted register image or reference calibration.
+
+An initial test incorrectly imposed the reviewed-band spacing limit on arbitrary
+100 MHz fixed-PLL requests. Complete-chain reconstruction remains checked there;
+spacing acceptance is tied to the actual reviewed bands. No claim of WSPR
+qualification at 100 MHz is made. The old planner is separately compiled against
+the new tests to confirm that reconstruction assertions detect the original bug.
+
+Final RF runs return to ordinary fixed-PLL planning on 40 m so this correction
+is exercised. The 2 m divide-by-6 PLL experiment remains selected. This deliberate
+strategy difference is recorded; step 5 versus step 4 is not a single-variable
+40 m synthesis comparison. Carrier register programming for step 5 matches the
+ordinary reference strategy, with the tiny reporting residual checked in software.

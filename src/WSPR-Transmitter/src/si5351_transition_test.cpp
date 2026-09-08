@@ -811,6 +811,11 @@ void test_burst_and_cache_failure_contract()
     device.close(); expect(device.open(), "reopen burst device");
     device.writeRegister(16, 0x4c);
     expect(adapter->address_attempts[16] == 3, "reopen invalidates cache");
+    device.close();
+    cfg.enable_register_cache = false;
+    Si5351Device uncached(cfg, adapter); expect(uncached.open(), "open uncached device");
+    uncached.writeRegister(16,0x4c); uncached.writeRegister(16,0x4c);
+    expect(adapter->address_attempts[16] == 5, "disabled cache sends repeated controls");
 }
 
 void test_optimized_backend_and_drive()
@@ -905,8 +910,25 @@ void test_envelope_deadlines_and_off_retune_readiness()
     adapter->after_write={}; bridge.on_wait={};
 }
 
+void test_all_ordered_pll_transitions()
+{
+    TestBridge bridge; auto adapter=std::make_shared<FakeI2CAdapter>();
+    auto cfg=config(adapter); cfg.pll_only_updates=true; cfg.device.optimize_register_writes=true;
+    WsprSi5351Backend backend(bridge,cfg); auto plan=four_tone_plan(16);
+    const unsigned order[] = {0,1,0,2,0,3,1,2,1,3,2,3,0,0,3,3};
+    const auto original=plan.events;
+    for (std::size_t i=0;i<plan.events.size();++i)
+        plan.events[i].frequency_hz=original[order[i]].frequency_hz;
+    expect(configure(backend,plan), "all ordered transition configure");
+    expect(backend.execute(plan).ok, "all ordered PLL transitions complete");
+    expect(adapter->address_attempts[177]==2 && count_write(*adapter,3,0xfe)==1,
+        "arbitrary compatible jumps and repeats do not reset/rekey");
+    expect(adapter->registers[3]==255, "arbitrary transition cleanup");
+}
+
 int main()
 {
+    test_all_ordered_pll_transitions();
     test_envelope_deadlines_and_off_retune_readiness();
     test_burst_and_cache_failure_contract();
     test_optimized_backend_and_drive();

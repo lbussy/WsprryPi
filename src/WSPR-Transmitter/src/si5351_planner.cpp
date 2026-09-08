@@ -674,7 +674,14 @@ double Si5351Planner::quantizeFrequency(
     if (!ms_params.valid || ms_params.actual_ratio <= 0.0)
         return 0.0;
 
-    return static_cast<double>(config_.parked_pll_hz) /
+    const double reference_hz = effectiveReferenceHz();
+    if (reference_hz <= 0.0) return 0.0;
+    const DividerParameters pll_params = build_divider_parameters(
+        static_cast<double>(config_.parked_pll_hz) / reference_hz,
+        kMinPllMultiplier, kMaxPllMultiplier);
+    if (!pll_params.valid) return 0.0;
+
+    return reference_hz * pll_params.actual_ratio /
         (ms_params.actual_ratio * static_cast<double>(r_divider));
 }
 

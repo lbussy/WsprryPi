@@ -909,8 +909,44 @@ void test_integer_multisynth_comparison()
     expect(unsupported.tone_sets[0].writes.empty(), "experiment does not broaden unreviewed modes");
 }
 
+void test_reported_frequency_from_packed_chain()
+{
+    bool exercised_pll_residual = false;
+    for (double ppm : {-200.0, -17.1234567, 0.0, 3.470680, 199.9999})
+    for (double base : {137500.0, 7040100.0, 14097100.0, 28000000.0, 100000000.0, 144490500.0})
+    {
+        Si5351Planner::Config cfg; cfg.calibration_ppm = ppm;
+        const auto plan = Si5351Planner(cfg).buildPlan(Si5351Planner::Mode::WSPR,
+            {{base}, {base+1.46484375}, {base+2.9296875}, {base+4.39453125}});
+        double previous = 0;
+        for (const auto& tone : plan.tone_sets)
+        {
+            const auto pll = decode_divider(tone.pll_retune_candidate.valid
+                ? tone.pll_retune_candidate.pll_writes : plan.startup_writes, 26);
+            const auto ms = decode_divider(tone.writes, 42);
+            std::uint8_t r_byte = 0; register_value(tone.writes,44,r_byte);
+            const unsigned r = 1U << ((r_byte >> 4) & 7);
+            expect(pll.valid && ms.valid, "packed chain decodes");
+            const double pll_ratio = pll.a + static_cast<double>(pll.b)/pll.c;
+            const double ms_ratio = ms.a + static_cast<double>(ms.b)/ms.c;
+            const double decoded_hz = cfg.reference_hz * (1 - ppm*1e-6) * pll_ratio / ms_ratio / r;
+            expect(std::fabs(tone.actual_hz-decoded_hz) < std::max(1e-8,base*2e-15),
+                "reported frequency includes the complete programmed chain");
+            if (!tone.pll_retune_candidate.valid &&
+                std::fabs(decoded_hz-static_cast<double>(cfg.parked_pll_hz)/ms_ratio/r) > 1e-7)
+                exercised_pll_residual = true;
+            if (previous != 0 && (base == 7040100.0 || base == 144490500.0))
+                expect(std::fabs(tone.actual_hz-previous-1.46484375) < .0001,
+                "complete-chain report retains WSPR spacing");
+            previous = tone.actual_hz;
+        }
+    }
+    expect(exercised_pll_residual, "fixture must expose the omitted PLL residual");
+}
+
 int main()
 {
+    test_reported_frequency_from_packed_chain();
     test_integer_multisynth_comparison();
     test_documented_ratio_domain();
     test_special_integer_encoding();
