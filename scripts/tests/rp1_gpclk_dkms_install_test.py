@@ -1547,6 +1547,7 @@ class ApplyPolicyTests(unittest.TestCase):
             "runtime_deployment.py", "runtime_controller_admin.py", "runtime_layout.py",
             "runtime_application.py", "runtime_output.py", "runtime_provider.py",
             "runtime_binding.py", "runtime_activation.py", "runtime_route_client.py",
+            "runtime_manager.py",
         }
         files = {
             "/usr/lib/rp1-gpclk-dkms/runtime-uapi/rp1_gpclk.h",
