@@ -301,6 +301,51 @@ namespace
         std::size_t expected_progress,
         const std::string& label);
 
+    void test_pll_only_and_readiness()
+    {
+        for (bool locked : {true, false}) {
+            TestBridge bridge;
+            auto adapter = std::make_shared<FakeI2CAdapter>();
+            adapter->registers[0] = locked ? 0 : 0x20;
+            auto cfg = config(adapter); cfg.pll_only_updates = true;
+            WsprSi5351Backend backend(bridge, cfg);
+            auto plan = four_tone_plan(4);
+            expect(configure(backend, plan), "PLL-only config");
+            auto result = backend.execute(plan);
+            expect(result.ok == locked, "PLLA readiness gates output");
+            expect(adapter->registers[3] == 255, "PLL-only cleanup disabled");
+            if (locked) {
+                expect(adapter->address_attempts[177] == 2, "Only startup/first tone reset");
+                expect(count_write(*adapter,3,0xfe) == 1, "No output re-enable between compatible PLL tones");
+                expect(adapter->address_attempts[42] == 1, "MS configured only for first tone");
+            } else {
+                expect(count_write(*adapter,3,0xfe) == 0, "Unlocked PLL never enables output");
+                expect(bridge.wait_calls == 50, "Readiness retry count bounded");
+            }
+        }
+        for (bool bus_failure : {true, false}) {
+            TestBridge bridge;
+            auto adapter=std::make_shared<FakeI2CAdapter>();
+            auto cfg=config(adapter);cfg.pll_only_updates=true;
+            if (bus_failure) { adapter->fail_address=26;adapter->fail_address_occurrence=3; }
+            else adapter->after_write=[adapter](std::uint8_t reg,std::uint8_t,std::size_t count) {
+                if (reg==26 && count==3) adapter->registers[0]=0x20;
+            };
+            WsprSi5351Backend backend(bridge,cfg);auto plan=four_tone_plan(4);
+            expect(configure(backend,plan), "Fast retune failure config");
+            auto result=backend.execute(plan);
+            expect(!result.ok && adapter->registers[3]==255, "Fast retune error inhibits output");
+            expect(count_write(*adapter,3,0xfe)==1, "Fast retune error never re-enables RF");
+            adapter->after_write={};
+        }
+        TestBridge bridge; bridge.interrupt_on_wait_call = 1;
+        auto adapter = std::make_shared<FakeI2CAdapter>(); adapter->registers[0] = 0x80;
+        WsprSi5351Backend backend(bridge,config(adapter));auto plan=single_tone_plan();
+        expect(configure(backend,plan), "Readiness cancellation config");
+        auto result=backend.execute(plan);
+        expect(result.stopped && adapter->registers[3]==255, "Readiness cancellation stays inhibited");
+    }
+
     void test_committed_calibration_snapshot_and_reporting()
     {
         TestBridge bridge;
@@ -745,6 +790,7 @@ namespace
 
 int main()
 {
+    test_pll_only_and_readiness();
     test_committed_calibration_snapshot_and_reporting();
     test_invalid_calibration_fails_before_output_enable();
     test_single_tone_calibration_reporting_and_cleanup();

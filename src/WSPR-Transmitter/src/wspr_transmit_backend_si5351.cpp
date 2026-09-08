@@ -1101,13 +1101,29 @@ bool WsprSi5351Backend::applyTone(
 
     if (!config_.dry_run)
     {
-        if (tone.requires_output_inhibit && !disableTransmitOutput())
+        bool pll_only = false;
+        if (config_.pll_only_updates && tone.pll_retune_candidate.valid &&
+            current_tone_index_ < si5351_plan_.tone_sets.size())
+        {
+            const auto& previous = si5351_plan_.tone_sets[current_tone_index_];
+            const auto& lhs = previous.pll_retune_candidate.multisynth_writes;
+            const auto& rhs = tone.pll_retune_candidate.multisynth_writes;
+            pll_only = previous.pll_retune_candidate.valid &&
+                previous.r_divider == tone.r_divider && lhs.size() == rhs.size() &&
+                std::equal(lhs.begin(), lhs.end(), rhs.begin(),
+                    [](const auto& a, const auto& b) {
+                        return a.address == b.address && a.value == b.value;
+                    });
+        }
+        const bool inhibited = tone.requires_output_inhibit && !pll_only;
+        if (inhibited && !disableTransmitOutput())
             return false;
 
         if (stop_requested_ || owner_.backendShouldStop())
             return false;
 
-        for (const Si5351Device::RegisterWrite& write : tone.writes)
+        const auto& writes = pll_only ? tone.pll_retune_candidate.pll_writes : tone.writes;
+        for (const Si5351Device::RegisterWrite& write : writes)
         {
             if (stop_requested_ || owner_.backendShouldStop())
                 return false;
@@ -1119,7 +1135,19 @@ bool WsprSi5351Backend::applyTone(
                 return false;
         }
 
-        if (tone.requires_output_inhibit &&
+        if (pll_only || (rf_enabled && !inhibited)) {
+            std::uint8_t status = 0;
+            if (!device_.readRegister(0,status) || (status & 0xa8) != 0) {
+                disableTransmitOutput();
+                return false;
+            }
+        } else if (!waitForPllReady()) {
+            return false;
+        }
+
+        if (stop_requested_ || owner_.backendShouldStop())
+            return false;
+        if (inhibited &&
             rf_enabled &&
             !enableTransmitOutput())
         {
@@ -1137,6 +1165,28 @@ bool WsprSi5351Backend::applyTone(
         log_si5351(owner_, WsprTransmitLogLevel::DEBUG, stream.str());
     }
     return true;
+}
+
+bool WsprSi5351Backend::waitForPllReady()
+{
+    // AN619 register 0: SYS_INIT bit 7, LOL_A bit 5, LOS_XTAL bit 3.
+    // This backend drives PLLA from XA (passive crystal or external TCXO).
+    constexpr std::uint8_t not_ready = 0xa8;
+    for (unsigned attempt = 0; attempt < 50; ++attempt)
+    {
+        if (stop_requested_ || owner_.backendShouldStop())
+            return false;
+        std::uint8_t status = 0;
+        if (!device_.readRegister(0, status))
+            return false;
+        if ((status & not_ready) == 0)
+            return true;
+        if (!owner_.backendWaitInterruptableFor(std::chrono::milliseconds(1)))
+            return false;
+    }
+    log_si5351(owner_, WsprTransmitLogLevel::ERROR,
+        "Si5351 PLLA/reference readiness timed out; output will remain inhibited.");
+    return false;
 }
 
 bool WsprSi5351Backend::enableTransmitOutput()

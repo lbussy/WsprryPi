@@ -57,6 +57,7 @@ namespace
         std::uint8_t i2c_address = 0x60;
         bool dry_run = false;
         double ppm = 0.0;
+        bool pll_only = false;
         std::string scenario;
         std::string fade = "none";
     };
@@ -95,6 +96,7 @@ namespace
             << "  --i2c-bus <n>\n"
             << "  --i2c-address <addr>\n"
             << "  --dry-run\n"
+            << "  --pll-only (experimental compatible PLL transitions)\n"
             << "  --ppm <ppm>\n"
             << "  --scenario carrier|transitions|keyed (bounded comparison)\n"
             << "  --fade none|linear|raised_cosine (keyed scenario only)\n";
@@ -204,6 +206,7 @@ namespace
                     throw std::invalid_argument("I2C address out of range.");
                 options.i2c_address = static_cast<std::uint8_t>(address);
             }
+            else if (arg == "--pll-only") options.pll_only = true;
             else if (arg == "--ppm") options.ppm = parse_double_arg(arg, require_value());
             else if (arg == "--scenario") options.scenario = require_value();
             else if (arg == "--fade") options.fade = require_value();
@@ -459,6 +462,7 @@ namespace
         config.planner.tx_output = Si5351Device::Output::CLK0;
         config.power_level = options.power_level;
         config.dry_run = options.dry_run;
+        config.pll_only_updates = options.pll_only;
         return config;
     }
 
