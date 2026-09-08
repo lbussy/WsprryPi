@@ -44,7 +44,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install host-only TLS and UI test dependencies
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev libsystemd-dev pkg-config cmake python3 nodejs node-ws php-cli
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev libsystemd-dev pkg-config cmake python3 nodejs php-cli
+      - name: Install UI development dependencies
+        working-directory: WsprryPi-UI
+        run: npm ci --ignore-scripts
       - name: Read-only pinned Pico reference
         uses: actions/checkout@v7
         with:

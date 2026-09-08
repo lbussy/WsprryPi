@@ -169,3 +169,12 @@ still received HTTP 403 before network tests. The administrator then made
 WsprryPico public. The pinned checkout no longer uses the custom token and keeps
 credential persistence disabled. No token value entered the repository. A
 successful subsequent network CI run is required to close this follow-up.
+
+The public checkout succeeded in [run 34267548736](https://github.com/WsprryPi/WsprryPi/actions/runs/34267548736).
+Its Linux TLS suite (29 cases), 2012-check production/credential-rotation test,
+shared API tests and actual Pico TLS interoperability all passed. The browser
+step then failed before running because the runner's Node.js could not resolve
+the distro-installed `ws` module. The job now uses the UI component's existing
+lockfile through `npm ci --ignore-scripts`, matching the established UI CI job.
+This dependency repair requires a fresh browser CI pass; the earlier failed
+step is retained as a failure, not visual acceptance.
